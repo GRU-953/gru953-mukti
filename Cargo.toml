@@ -1,0 +1,16 @@
+[package]
+name = "gru953-scribe"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+description = "Deterministic Bijoy/SutonnyMJ legacy Bangla to Unicode converter, with a reverse encoder for round-trip testing."
+readme = "README.md"
+license-file = "LICENSE"
+keywords = ["bengali", "bangla", "bijoy", "sutonnymj", "unicode"]
+categories = ["text-processing", "internationalization"]
+
+[dependencies]
+# None. This crate is deliberately dependency-free.
+
+[lints.clippy]
+all = "warn"
