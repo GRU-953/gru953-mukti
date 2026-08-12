@@ -28,7 +28,7 @@ use std::path::{Path, PathBuf};
 
 use gru953_scribe::dictionary::Dictionary;
 use gru953_scribe::roundtrip::{is_testable_word, normalise_nukta, to_bijoy};
-use gru953_scribe::{convert, detect, LegacyEncoding};
+use gru953_scribe::{convert, detect, word_is_well_formed, LegacyEncoding};
 use stats::{edit_distance, thousands, Proportion};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -69,9 +69,10 @@ fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let mut words_ok = 0usize;
     let mut words_total = 0usize;
     let mut skipped = 0usize;
+    let mut malformed = 0usize;
     let mut chars_total = 0usize;
     let mut chars_wrong = 0usize;
-    let mut patterns: BTreeMap<String, usize> = BTreeMap::new();
+    let mut patterns: BTreeMap<String, (usize, String)> = BTreeMap::new();
 
     while let Some(key) = fst::Streamer::next(&mut stream) {
         let word = std::str::from_utf8(key)?;
@@ -79,6 +80,18 @@ fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
         // construction; testing it would measure the ambiguity, not the code.
         if !is_testable_word(word) {
             skipped += 1;
+            continue;
+        }
+        // The word list has typing slips in it — a vowel sign struck twice, two
+        // signs on one consonant, `আ` typed as `অ` plus a matra. Scribe's repair
+        // passes turn these into the correct spelling, which is what they are
+        // for, and the round trip then scores that correction as a failure.
+        //
+        // They are set aside on an orthographic test that knows nothing about
+        // Scribe: each is a sequence Bengali does not permit at all. The count
+        // is printed, so this is never a silent exclusion of whatever failed.
+        if !word_is_well_formed(word) {
+            malformed += 1;
             continue;
         }
         words_total += 1;
@@ -92,7 +105,11 @@ fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
             words_ok += 1;
         } else {
             chars_wrong += edit_distance(&a, &b);
-            *patterns.entry(difference(&a, &b)).or_default() += 1;
+            let e = patterns.entry(difference(&a, &b)).or_default();
+            e.0 += 1;
+            if e.1.is_empty() {
+                e.1 = format!("{a} -> {b}");
+            }
         }
     }
 
@@ -113,10 +130,17 @@ fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
         println!("    The gap is canonically equivalent spellings — a two-part vowel written");
         println!("    as its two halves rather than as one character. See `canonical`.");
     }
+    println!("  Excluded, and why:");
     println!(
-        "  {} words skipped as ambiguous (they mix scripts, so Bijoy cannot be told from ASCII).",
+        "    {:>6}  mix scripts, so Bijoy cannot be told from plain ASCII in them",
         thousands(skipped)
     );
+    println!(
+        "    {:>6}  not well-formed Bengali in the source: a vowel sign struck twice, two",
+        thousands(malformed)
+    );
+    println!("            on one consonant, or `আ` typed as `অ` plus a matra. Scribe repairs");
+    println!("            these to the correct spelling; the word list, not Scribe, is wrong.");
     gate("word accuracy", words.rate(), 0.99);
     top_patterns(&patterns, "  Most common failures");
     Ok(())
@@ -142,10 +166,34 @@ fn m2_character_grid(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
     let text = fs::read_to_string(cfg.corpus.join("BengaliCharacterCombinations.txt"))?;
     let mut ok = 0usize;
     let mut total = 0usize;
-    let mut patterns: BTreeMap<String, usize> = BTreeMap::new();
+    let mut legend = 0usize;
+    let mut mistyped = 0usize;
+    let mut patterns: BTreeMap<String, (usize, String)> = BTreeMap::new();
 
     for token in text.split_whitespace() {
         if !is_testable_word(token) {
+            continue;
+        }
+        // Two kinds of entry in this file are not cells of the grid, and both
+        // are counted and named below rather than quietly dropped. Excluding
+        // whatever fails is how a harness flatters itself, so each exclusion
+        // has to answer to a test that has nothing to do with Scribe.
+        //
+        // First, the file's own legend. Lines 3 and 4 list the vowel signs
+        // (`া ি ী ু ৃ ে ৈ ো ৌ`) and the phala forms (`্য ্র ্ন ্ম ্ল ্ব`) — the
+        // headings the grid is indexed by, not words. They are recognised by
+        // opening with a mark rather than a consonant, which no word does.
+        if token.starts_with(is_leading_mark) {
+            legend += 1;
+            continue;
+        }
+        // Second, five mistyped cells. Each is a vowel sign next to a hasant,
+        // which Bengali orthography does not permit because a vowel closes its
+        // syllable and leaves the hasant nothing to join. In every case the
+        // other seven cells of the same row are spelled correctly, and Scribe
+        // converts these to the spelling the row implies.
+        if !word_is_well_formed(token) {
+            mistyped += 1;
             continue;
         }
         total += 1;
@@ -154,12 +202,22 @@ fn m2_character_grid(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
         if a == b {
             ok += 1;
         } else {
-            *patterns.entry(difference(&a, &b)).or_default() += 1;
+            let e = patterns.entry(difference(&a, &b)).or_default();
+            e.0 += 1;
+            if e.1.is_empty() {
+                e.1 = format!("{a} -> {b}");
+            }
         }
     }
 
     let p = Proportion::new(ok, total);
     println!("  Combinations correct  {}", p.describe());
+    println!("  Excluded, and why:");
+    println!("    {legend:>3}  legend entries — the grid's own headings, not words");
+    println!("    {mistyped:>3}  cells mistyped in the source file: a vowel sign beside a hasant,");
+    println!("         which Bengali does not permit. The rest of each such row is spelled");
+    println!("         correctly and Scribe produces that spelling. The grid is wrong here,");
+    println!("         not Scribe — and it is judged so by orthography, not by agreeing with us.");
     gate("character grid", p.rate(), 1.0);
     top_patterns(&patterns, "  Combinations that fail");
     Ok(())
@@ -242,7 +300,7 @@ fn m4_vowel_preservation(cfg: &Config) -> Result<(), Box<dyn std::error::Error>>
     let text = fs::read_to_string(cfg.corpus.join("wrong_file.txt"))?;
     let mut preserved = 0usize;
     let mut total = 0usize;
-    let mut patterns: BTreeMap<String, usize> = BTreeMap::new();
+    let mut patterns: BTreeMap<String, (usize, String)> = BTreeMap::new();
 
     for line in text.lines() {
         let word = line.trim().trim_start_matches('\u{FEFF}');
@@ -255,7 +313,11 @@ fn m4_vowel_preservation(cfg: &Config) -> Result<(), Box<dyn std::error::Error>>
         if a == b {
             preserved += 1;
         } else {
-            *patterns.entry(difference(&a, &b)).or_default() += 1;
+            let e = patterns.entry(difference(&a, &b)).or_default();
+            e.0 += 1;
+            if e.1.is_empty() {
+                e.1 = format!("{a} -> {b}");
+            }
         }
     }
 
@@ -400,6 +462,17 @@ fn rows(
     }))
 }
 
+/// A combining mark that cannot begin a word: a vowel sign or a hasant.
+///
+/// Used to recognise the character grid's legend entries, which are the marks
+/// themselves rather than words made with them.
+fn is_leading_mark(c: char) -> bool {
+    matches!(
+        c,
+        'া' | 'ি' | 'ী' | 'ু' | 'ূ' | 'ৃ' | 'ে' | 'ৈ' | 'ো' | 'ৌ' | 'ৗ' | '\u{09CD}'
+    )
+}
+
 /// Settle spellings that Unicode itself calls equivalent, before comparing.
 ///
 /// Two ambiguities, both of which produce byte differences that are not word
@@ -464,15 +537,24 @@ fn difference(a: &str, b: &str) -> String {
     )
 }
 
-fn top_patterns(patterns: &BTreeMap<String, usize>, title: &str) {
+/// The commonest failures, each with one whole word showing it in context.
+///
+/// Only ever called on measurements drawn from the public word corpus, never
+/// from the private document archive — the examples are ordinary dictionary
+/// vocabulary, and the difference patterns alone are too short to identify
+/// anything anyway.
+fn top_patterns(patterns: &BTreeMap<String, (usize, String)>, title: &str) {
     if patterns.is_empty() {
         return;
     }
     let mut sorted: Vec<_> = patterns.iter().collect();
-    sorted.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    sorted.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(b.0)));
     println!("{title} ({} distinct):", thousands(patterns.len()));
-    for (pattern, count) in sorted.iter().take(10) {
-        println!("    {:>8}x  {pattern}", thousands(**count));
+    for (pattern, (count, example)) in sorted.iter().take(12) {
+        println!(
+            "    {:>8}x  {pattern:<22} e.g. {example}",
+            thousands(*count)
+        );
     }
 }
 

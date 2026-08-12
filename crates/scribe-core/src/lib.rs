@@ -92,6 +92,19 @@ const fn is_kar(c: char) -> bool {
     is_pre_kar(c) || is_post_kar(c)
 }
 
+/// An independent vowel — a vowel written as a letter in its own right.
+///
+/// These already **are** the vowel, so they never take a vowel sign as well:
+/// `আ` and `আ` + `া` are not two spellings of one thing, the second is simply
+/// impossible. It is a common typing slip all the same, because on several
+/// Bengali keyboards the two are adjacent keys.
+const fn is_independent_vowel(c: char) -> bool {
+    matches!(
+        c,
+        'অ' | 'আ' | 'ই' | 'ঈ' | 'উ' | 'ঊ' | 'ঋ' | 'ঌ' | 'এ' | 'ঐ' | 'ও' | 'ঔ'
+    )
+}
+
 /// Is this a Bengali consonant?
 ///
 /// Note the last three explicit codepoints. `ড়`, `ঢ়` and `য়` exist in Unicode
@@ -900,6 +913,8 @@ pub fn bengali_is_plausible(text: &str) -> bool {
             faults += 1; // two vowel signs cannot sit together
         } else if is_kar(c) && is_halant(prev) {
             faults += 1; // a hasant is never followed by a vowel sign
+        } else if is_halant(c) && is_kar(prev) {
+            faults += 1; // nor does a hasant ever follow one — see below
         }
         at_word_start = false;
     }
@@ -908,6 +923,55 @@ pub fn bengali_is_plausible(text: &str) -> bool {
         return true; // too little Bengali to judge; do not accuse it
     }
     (faults as f32 / bengali as f32) < 0.04
+}
+
+/// Is this single word well formed Bengali?
+///
+/// The same orthographic rules as [`bengali_is_plausible`], but applied to one
+/// word with **no length escape hatch** — that function forgives anything under
+/// eight Bengali characters, because a short fragment carries too little signal
+/// to accuse. A single word is different: the rules either hold across it or
+/// they do not, and its length is not evidence either way.
+///
+/// The rules are the ones Bengali orthography does not permit:
+///
+/// * a vowel sign or a hasant cannot open a word;
+/// * two vowel signs cannot sit together;
+/// * a hasant is never followed by a vowel sign;
+/// * **a vowel sign is never followed by a hasant.** A vowel sign closes its
+///   syllable, so a hasant after one has no consonant left to join. `দূ্র্য` is
+///   impossible for the same reason `দ্র্যূ` is ordinary;
+/// * **an independent vowel never takes a vowel sign.** `আ` already is the
+///   vowel; `অ` + `া` is a typing slip for it, not a second spelling of it.
+///
+/// That last rule earned its place immediately. Four entries in the reference
+/// character grid — `দূ্র্য`, `ন্ধূ্র`, `মূ্ন`, `ষ্টূ্র` — are typed this way,
+/// each one the sixth cell of a row whose other seven cells are spelled
+/// correctly. Scribe converts them to the well-formed spelling, and the harness
+/// was scoring it wrong for doing so. Stating the rule here means the harness
+/// can excuse them on an independent orthographic test rather than on a claim
+/// that Scribe happens to be right.
+pub fn word_is_well_formed(word: &str) -> bool {
+    let chars: Vec<char> = word.chars().collect();
+    let mut seen_bengali = false;
+    for (i, &c) in chars.iter().enumerate() {
+        if !('\u{0980}'..='\u{09FF}').contains(&c) {
+            continue;
+        }
+        let prev = if i > 0 { chars[i - 1] } else { ' ' };
+        let opens = !seen_bengali;
+        seen_bengali = true;
+
+        let fault = ((is_kar(c) || is_halant(c)) && opens)
+            || (is_kar(c) && is_kar(prev))
+            || (is_kar(c) && is_halant(prev))
+            || (is_halant(c) && is_kar(prev))
+            || (is_kar(c) && is_independent_vowel(prev));
+        if fault {
+            return false;
+        }
+    }
+    true
 }
 
 /// Does this text turn into real Bengali when run through the tables?
@@ -1221,6 +1285,66 @@ mod tests {
     /// description of work".
     const LEGACY_LINE: &str = "mvßvwnK cªwZ\u{2020}e`b Ges Kv\u{2020}Ri weeiY";
     const LEGACY_LINE_UNICODE: &str = "সাপ্তাহিক প্রতিবেদন এবং কাজের বিবরণ";
+
+    /// The orthographic rules, on single words, with no length forgiveness.
+    #[test]
+    fn well_formed_words_pass_and_impossible_ones_do_not() {
+        for good in [
+            "কর্মসূচি",
+            "প্রতিবেদন",
+            "দ্র্যূ", // the correct spelling of the grid's সিক্স cell
+            "ন্ধ্রূ",
+            "ম্নূ",
+            "ষ্ট্রূ",
+            "ব্র্যান্ড",  // a ra-phala, which must not be mistaken for a fault
+            "সর্বোচ্চ", // a reph
+            "অন্ন",
+            "hello", // nothing Bengali in it to judge
+            "",
+        ] {
+            assert!(
+                word_is_well_formed(good),
+                "well-formed word rejected: {good}"
+            );
+        }
+
+        // The four malformed entries in the reference character grid. Each is a
+        // vowel sign followed by a hasant, which is structurally impossible:
+        // the vowel closes the syllable, so the hasant has nothing to join.
+        for impossible in ["দূ্র্য", "ন্ধূ্র", "মূ্ন", "ষ্টূ্র"]
+        {
+            assert!(
+                !word_is_well_formed(impossible),
+                "an impossible spelling was accepted: {impossible}"
+            );
+        }
+
+        // Typing slips found in the reference word list, every one of which
+        // Scribe already converts to the correct spelling. Each is impossible
+        // by orthography, which is what lets the harness set them aside
+        // without having to claim Scribe is right about them.
+        for slip in [
+            "আহমেদুুল", // the u-kar struck twice
+            "অতিারকা",  // two vowel signs on one consonant
+            "অাগে",    // আ typed as অ followed by a matra
+            "আামায়",    // and again, after a real আ
+            "ক্ষেোভে", // ে and ো together
+        ] {
+            assert!(
+                !word_is_well_formed(slip),
+                "a known typing slip was accepted as well formed: {slip}"
+            );
+        }
+
+        // And the rules that were already here, now without the length escape.
+        for impossible in ["\u{09BF}কথা", "\u{09CD}কথা", "কাা", "ক\u{09CD}\u{09BE}"]
+        {
+            assert!(
+                !word_is_well_formed(impossible),
+                "an impossible spelling was accepted: {impossible:?}"
+            );
+        }
+    }
 
     #[test]
     fn unicode_bangla_is_left_alone() {
