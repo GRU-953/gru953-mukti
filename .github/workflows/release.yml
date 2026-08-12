@@ -75,10 +75,27 @@ jobs:
       - name: Test
         run: cargo test --workspace --release
 
-      # The command-line tool is built for the real architecture of the
-      # runner; only the app bundle is made universal.
+      # The command-line tool, built for real.
+      #
+      # On macOS it is built for BOTH architectures and joined with lipo. The
+      # first attempt built it only for the runner's own architecture and then
+      # named the artefact "universal", which was a lie an Intel Mac user would
+      # discover by downloading a file that would not run. The app bundle was
+      # genuinely universal; only this was not.
       - name: Build the command-line tool
-        run: cargo build --release -p scribe-cli
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            cargo build --release -p scribe-cli --target aarch64-apple-darwin
+            cargo build --release -p scribe-cli --target x86_64-apple-darwin
+            mkdir -p target/universal-apple-darwin/release
+            lipo -create -output target/universal-apple-darwin/release/scribe \
+              target/aarch64-apple-darwin/release/scribe \
+              target/x86_64-apple-darwin/release/scribe
+            lipo -archs target/universal-apple-darwin/release/scribe
+          else
+            cargo build --release -p scribe-cli
+          fi
 
       - name: Build the app installer
         uses: tauri-apps/tauri-action@v0
@@ -91,9 +108,15 @@ jobs:
         run: |
           mkdir -p out
           # The command-line tool, under a name that says which machine it is for.
-          for f in target/release/scribe target/release/scribe.exe; do
+          for f in target/universal-apple-darwin/release/scribe \
+                   target/release/scribe target/release/scribe.exe; do
             [ -f "$f" ] && cp "$f" "out/scribe-${{ matrix.target }}${f##*scribe}"
           done
+          # Prove the claim in the file name rather than asserting it.
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            lipo -archs out/scribe-universal-apple-darwin | grep -q "x86_64 arm64" \
+              || { echo "the universal binary is not universal"; exit 1; }
+          fi
           # Installers, wherever this platform's bundler put them.
           find target -path '*/release/bundle/*' \
             \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' \) \
