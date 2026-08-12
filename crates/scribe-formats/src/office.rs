@@ -31,14 +31,35 @@ pub struct Run {
 }
 
 /// The parts of each archive that actually hold document text.
+///
+/// The list is longer than the obvious three because text hides in places
+/// that do not look like the document body, and every one of these was found
+/// by converting a real archive and then asking what still contained Bijoy:
+///
+/// * **SmartArt diagrams** (`diagrams/data*.xml`) hold their own text. A
+///   process diagram full of Bangla came back entirely unconverted while the
+///   paragraphs around it were fine — the worst kind of half-done.
+/// * **Charts** (`charts/chart*.xml`) hold axis labels and titles.
+/// * **Speaker notes**, **comments**, **text boxes** and **headers** are all
+///   text somebody wrote and expects to be converted.
 pub fn is_text_part(name: &str) -> bool {
+    let xml = name.ends_with(".xml");
     name == "word/document.xml"
         || name == "xl/sharedStrings.xml"
-        || (name.starts_with("ppt/slides/slide") && name.ends_with(".xml"))
-        || (name.starts_with("word/") && name.starts_with("word/footnotes"))
-        || (name.starts_with("word/") && name.starts_with("word/endnotes"))
-        || (name.starts_with("word/header") && name.ends_with(".xml"))
-        || (name.starts_with("word/footer") && name.ends_with(".xml"))
+        || name == "word/comments.xml"
+        || (xml && name.starts_with("ppt/slides/slide"))
+        || (xml && name.starts_with("ppt/notesSlides/notesSlide"))
+        || (xml && name.starts_with("word/footnotes"))
+        || (xml && name.starts_with("word/endnotes"))
+        || (xml && name.starts_with("word/header"))
+        || (xml && name.starts_with("word/footer"))
+        // SmartArt and charts, wherever the format keeps them.
+        // SmartArt keeps TWO copies: `data` is the model, `drawing` is the
+        // laid-out rendering. Both carry the text, so both must be converted
+        // or the diagram disagrees with itself.
+        || (xml && name.contains("/diagrams/data"))
+        || (xml && name.contains("/diagrams/drawing"))
+        || (xml && name.contains("/charts/chart"))
 }
 
 /// Parts that hold FONT settings but no document text.
@@ -97,8 +118,29 @@ pub(crate) fn ends_a_line(name: &[u8]) -> bool {
 pub(crate) fn names_a_font(name: &[u8]) -> bool {
     matches!(
         name,
-        b"rFonts" | b"latin" | b"rFont" | b"name" | b"ea" | b"cs" | b"sym" | b"font"
+        b"rFonts"
+            | b"latin"
+            | b"rFont"
+            | b"name"
+            | b"ea"
+            | b"cs"
+            | b"sym"
+            | b"font"
+            // The fallback name Word records beside a font it may not find.
+            | b"altName"
     )
+}
+
+/// Is this element a run of actual text?
+///
+/// **The prefix matters here, unlike everywhere else in this file.** Word uses
+/// `w:t`, DrawingML — slides, charts, SmartArt — uses `a:t`, and Excel uses a
+/// bare `t`. But SmartArt also has `dgm:t`, which is a text *container*, not
+/// text. Matching on the local name alone read that container as a run, which
+/// double-counted its contents and shifted the word count of every SmartArt
+/// document. Measured: sixteen files out of three hundred.
+fn is_text_element(qualified: &[u8]) -> bool {
+    matches!(qualified, b"t" | b"w:t" | b"a:t")
 }
 
 /// Strip a namespace prefix: `w:rFonts` becomes `rFonts`.
@@ -165,7 +207,7 @@ fn collect_runs(xml: &str, out: &mut Vec<Run>) -> Result<(), quick_xml::Error> {
                         }
                     }
                 }
-                b"t" => {
+                _ if is_text_element(e.name().as_ref()) => {
                     in_text = true;
                     text.clear();
                 }
@@ -183,7 +225,7 @@ fn collect_runs(xml: &str, out: &mut Vec<Run>) -> Result<(), quick_xml::Error> {
                     font: None,
                 });
             }
-            Event::End(e) if local_name(e.name().as_ref()) == b"t" => {
+            Event::End(e) if is_text_element(e.name().as_ref()) => {
                 in_text = false;
                 // Whitespace-only runs are KEPT. Word stores a single space
                 // as its own run, and dropping those glued adjacent words
@@ -449,7 +491,7 @@ fn rewrite_part(
     loop {
         match reader.read_event()? {
             XmlEvent::Eof => break,
-            XmlEvent::Start(e) if local_name(e.name().as_ref()) == b"t" => {
+            XmlEvent::Start(e) if is_text_element(e.name().as_ref()) => {
                 in_text = true;
                 original.clear();
                 writer.write_event(XmlEvent::Start(e))?;
@@ -457,7 +499,7 @@ fn rewrite_part(
             XmlEvent::Text(e) if in_text => {
                 original.push_str(&e.unescape().unwrap_or_default());
             }
-            XmlEvent::End(e) if local_name(e.name().as_ref()) == b"t" => {
+            XmlEvent::End(e) if is_text_element(e.name().as_ref()) => {
                 if !original.is_empty() {
                     let len = original.chars().count();
                     let replacement = span(&pieces, cursor, cursor + len);

@@ -110,27 +110,15 @@ textarea,
   color: var(--os-muted);
 }
 
-/* A converted word. Marked with a tinted background AND an underline, because
- * the brand kit forbids carrying meaning by colour alone. */
+/* A converted word. Marked with a tinted background AND an underline AND an
+ * accessible name, because the brand kit forbids carrying meaning by colour
+ * alone. Both colours come from the theme-aware tint pair, so the pairing
+ * holds in light and dark rather than in only one of them. */
 .changed {
-  background: var(--os-cobalt-100);
-  color: var(--os-primary-strong);
+  background: var(--os-tint);
+  color: var(--os-on-tint);
   border-bottom: 2px solid var(--os-primary);
   border-radius: 2px;
-}
-
-:root[data-theme="dark"] .changed,
-:root:not([data-theme="light"]) .changed { }
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .changed {
-    background: #1B2B46;
-    color: var(--os-primary-strong);
-  }
-}
-:root[data-theme="dark"] .changed {
-  background: #1B2B46;
-  color: var(--os-primary-strong);
 }
 
 .plain .changed {
@@ -169,8 +157,8 @@ textarea,
 
 .btn[aria-pressed="true"] {
   border-color: var(--os-primary);
-  background: var(--os-cobalt-100);
-  color: var(--os-primary-strong);
+  background: var(--os-tint);
+  color: var(--os-on-tint);
 }
 
 /* --- Status and hints -------------------------------------------------- */

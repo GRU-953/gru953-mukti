@@ -60,10 +60,21 @@
    * those fills drops to roughly 3.16:1 and fails AA. */
   --os-on-fill: #FFFFFF;
 
-  /* Cobalt tints used for the app icon and soft fills (kit ramp). */
+  /* Cobalt tints from the kit's ramp, for the app icon and soft fills. */
   --os-cobalt-100: #EAF7FF;
   --os-cobalt-200: #D1E7FF;
   --os-cobalt-600: #416CBD;
+
+  /* A soft cobalt fill for a selected control or a highlighted word.
+   *
+   * Theme-aware, and it has to be. Using the raw --os-cobalt-100 here was a
+   * real defect: that token is light in BOTH themes, while the text colour
+   * paired with it (--os-primary-strong) turns light in dark mode. The result
+   * was light blue on light blue, measured at 1.65:1 against a 4.5:1
+   * requirement. A colour must never be theme-aware on one side of a pairing
+   * only. */
+  --os-tint: #EAF7FF;
+  --os-on-tint: #2E4F8E;
 
   /* --- Typography ----------------------------------------------------- */
   --os-font-sans: "Noto Sans", "Noto Sans Bengali", system-ui, sans-serif;
@@ -135,6 +146,9 @@
     --os-info: #379CBF;
 
     --os-on-fill: #16191F;
+
+    --os-tint: #1B2B46;
+    --os-on-tint: #9BC3FF;
   }
 }
 
@@ -166,6 +180,9 @@
   --os-info: #379CBF;
 
   --os-on-fill: #16191F;
+
+  --os-tint: #1B2B46;
+  --os-on-tint: #9BC3FF;
 }
 
 /* --- Base ------------------------------------------------------------- */

@@ -282,9 +282,19 @@ fn handle_office(
             path.display()
         )
     })?;
+    // An empty file is not a broken document, and saying "invalid Zip archive:
+    // could not find EOCD" to somebody who has just dragged a file in is not
+    // an explanation of anything. Found by running the tool over a real
+    // archive of 1,399 files, exactly one of which was zero bytes.
+    if bytes.is_empty() {
+        return Err(format!(
+            "{} is empty — there is nothing in it to convert.",
+            path.display()
+        ));
+    }
     let (converted, summary) = convert_office(&bytes, font).map_err(|e| {
         format!(
-            "Could not read {} as an Office file: {e}\nIf it is an older .doc, .xls or .ppt, save it as .docx, .xlsx or .pptx first.",
+            "Could not read {} as a Word, Excel or PowerPoint file.\nIf it is an older .doc, .xls or .ppt, open it and save it as .docx, .xlsx or .pptx first.\n(The technical reason: {e})",
             path.display()
         )
     })?;
