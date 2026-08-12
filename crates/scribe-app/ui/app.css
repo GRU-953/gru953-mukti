@@ -1,3 +1,30 @@
+/* The brand's two typefaces, bundled rather than borrowed from the system.
+ *
+ * Bundling matters most for Bengali. macOS and Windows both ship a Bangla
+ * font, but a minimal Linux install may not, and a Bangla tool that shows
+ * Bangla as empty boxes is not a tool. Latin is bundled too because Noto Sans
+ * IS the brand typeface, and letting each platform substitute its own would
+ * mean the app looked like three different products.
+ *
+ * Variable fonts, so one file covers every weight the brand uses (400 through
+ * 700) instead of four.
+ *
+ * SIL Open Font License 1.1 — see fonts/OFL.txt and THIRD-PARTY-LICENSES.
+ */
+@font-face {
+  font-family: "Noto Sans";
+  src: url("fonts/NotoSans-variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Noto Sans Bengali";
+  src: url("fonts/NotoSansBengali-variable.ttf") format("truetype-variations");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
 /* GRU953 Scribe — window styling.
  *
  * Every colour comes from tokens.css, which is transcribed from the brand kit.

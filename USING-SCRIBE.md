@@ -104,8 +104,10 @@ again. On Windows: click *More info*, then *Run anyway*.
 **"Could not read … as a Word, Excel or PowerPoint file"** — it is probably an
 older `.doc`, `.xls` or `.ppt`. Save it in the newer format first.
 
-**Bangla shows as boxes or question marks** — your computer is missing a
-Bangla font. Install *Noto Sans Bengali*, which is free.
+**Bangla shows as boxes or question marks** — this should not happen in the
+app, which carries its own Bangla font. If you see it in a converted file
+opened elsewhere, that programme is missing a Bangla font; install *Noto Sans
+Bengali*, which is free.
 
 **A word did not convert** — Scribe was not confident enough. This happens
 most with single words, names, and text that is mostly numbers. Converting the

@@ -4,7 +4,8 @@ Convert legacy **Bijoy / SutonnyMJ** Bangla into proper **Unicode** Bengali —
 word by word, so English, numbers and Bengali that is *already* Unicode come
 through exactly as they went in.
 
-Works offline. Nothing you convert leaves your machine.
+Works offline. Nothing you convert leaves your machine. The Bangla fonts are
+bundled, so it looks the same on every platform.
 
 ```sh
 scribe convert report.docx      # writes report.unicode.docx, formatting intact

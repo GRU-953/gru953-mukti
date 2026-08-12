@@ -17,6 +17,10 @@ accuracy figure that means something.
 - **Word, Excel and PowerPoint files** converted in place, with formatting,
   tables and pictures untouched. Includes SmartArt, charts, speaker notes and
   comments — all of which hold text people write and expect to be converted.
+- **The brand's two typefaces are bundled** — Noto Sans and Noto Sans Bengali,
+  under the SIL Open Font License 1.1. The app therefore looks the same on all
+  three platforms, and Bangla renders even on a Linux install that ships no
+  Bangla font of its own.
 - **PDF**, read-only and best effort. Text is extracted and converted; layout
   is not preserved. Text drawn in fonts that store shapes rather than letters
   is skipped and counted, never guessed at.
@@ -54,8 +58,6 @@ from a held-out half of the data never looked at during tuning:
 - **The installers are not signed.** Your computer will warn you the first
   time. Signing needs paid certificates from Apple and a Windows certificate
   authority, and neither is set up.
-- **Noto Sans Bengali is not bundled.** The app uses whatever Bangla font your
-  system has. macOS and Windows both ship one; a minimal Linux install may not.
 - **Older `.doc`, `.xls` and `.ppt`** cannot be read. Save as the newer format
   first.
 - **PDF quality varies widely.** Measured across 60 legacy-font PDFs: 28 good,
