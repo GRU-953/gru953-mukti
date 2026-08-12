@@ -28,15 +28,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Both Mac architectures. A universal build would be neater but
-          # doubles the build time for a tool most people will run on one
-          # machine, so the two are shipped separately and named clearly.
+          # ONE universal Mac build covering both architectures, rather than a
+          # separate job per architecture.
+          #
+          # The two-job version was tried and abandoned: the Intel job needs a
+          # `macos-13` runner, and on a private repository those are scarce
+          # enough that it sat queued for half an hour without starting while
+          # the other three finished. A universal binary needs no scarce
+          # runner, produces one file for users to choose between instead of
+          # two, and is what Apple expects anyway.
           - os: macos-latest
-            label: macOS (Apple silicon)
-            target: aarch64-apple-darwin
-          - os: macos-13
-            label: macOS (Intel)
-            target: x86_64-apple-darwin
+            label: macOS (universal)
+            target: universal-apple-darwin
+            extra-targets: aarch64-apple-darwin,x86_64-apple-darwin
           - os: ubuntu-22.04
             label: Ubuntu
             target: x86_64-unknown-linux-gnu
@@ -49,7 +53,9 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          # A universal build is assembled from both real targets, and
+          # `universal-apple-darwin` is not itself something rustup installs.
+          targets: ${{ matrix.extra-targets || matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
 
@@ -69,8 +75,10 @@ jobs:
       - name: Test
         run: cargo test --workspace --release
 
+      # The command-line tool is built for the real architecture of the
+      # runner; only the app bundle is made universal.
       - name: Build the command-line tool
-        run: cargo build --release -p scribe-cli --target ${{ matrix.target }}
+        run: cargo build --release -p scribe-cli
 
       - name: Build the app installer
         uses: tauri-apps/tauri-action@v0
@@ -83,7 +91,7 @@ jobs:
         run: |
           mkdir -p out
           # The command-line tool, under a name that says which machine it is for.
-          for f in target/${{ matrix.target }}/release/scribe target/${{ matrix.target }}/release/scribe.exe; do
+          for f in target/release/scribe target/release/scribe.exe; do
             [ -f "$f" ] && cp "$f" "out/scribe-${{ matrix.target }}${f##*scribe}"
           done
           # Installers, wherever this platform's bundler put them.
