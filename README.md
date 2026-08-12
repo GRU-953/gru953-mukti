@@ -1,158 +1,126 @@
-# gru953-scribe
+# GRU953 Scribe
 
-Convert legacy **Bijoy / SutonnyMJ** Bangla text into proper **Unicode** Bengali.
+Convert legacy **Bijoy / SutonnyMJ** Bangla into proper **Unicode** Bengali —
+word by word, so English, numbers and Bengali that is *already* Unicode come
+through exactly as they went in.
 
-Pure Rust. Deterministic. Offline.
+Works offline. Nothing you convert leaves your machine.
 
-```toml
-[dependencies]
-gru953-scribe = "0.2"
+```sh
+scribe convert report.docx      # writes report.unicode.docx, formatting intact
+scribe convert notes.txt        # writes notes.unicode.txt
+scribe check *.docx             # says what would change, writes nothing
 ```
 
-```rust
-use gru953_scribe::{convert, convert_document, detect, LegacyEncoding};
-
-// Convert one string that you already know is legacy-encoded.
-assert_eq!(convert("Kg©m~wP"), "কর্মসূচি");
-
-// Or let it decide for itself, line by line, across a whole document.
-let result = convert_document(text);
-println!("{} of {} lines converted", result.lines_converted, result.lines_total);
-
-// Or just ask what a piece of text is.
-match detect(text).encoding {
-    LegacyEncoding::SutonnyMj    => println!("legacy Bijoy"),
-    LegacyEncoding::AlreadyUnicode => println!("already Unicode Bengali"),
-    LegacyEncoding::NotBangla    => println!("not Bangla"),
-}
-```
+Or open the app and paste text into it.
 
 ## What it does
 
-Bijoy-family encodings are a **font hack**. The bytes stored in the file are
-ordinary ASCII and Latin-1; they only look Bengali because a font draws Bengali
-shapes on top of them. Worse, the bytes are stored in the order the glyphs are
+Bijoy-family encodings are a **font hack**. The bytes in the file are ordinary
+ASCII and Latin-1; they only look Bengali because a font draws Bengali shapes
+on top of them. Worse, the bytes are stored in the order the glyphs are
 **drawn**, not the order the letters are **spoken**. Unicode stores the spoken
 order.
 
-So converting is not a character swap. Three things must happen, in order:
+So converting is not a character swap. The clearest case is the i-kar: Bijoy
+stores `ি` *before* its consonant, because that is where it is drawn; Unicode
+stores it *after*. Skip the reordering and every such word comes out silently
+wrong — still well-formed Bengali, just not the word that was written.
 
-1. map each glyph to its Unicode letter, longest conjuncts first;
-2. move vowel signs, reph and nukta to where Unicode expects them;
-3. tidy up the two-part vowels and other details.
+## Accuracy
 
-The clearest example is the i-kar. Bijoy stores `ি` *before* its consonant,
-because that is where it is drawn; Unicode stores it *after*. Skip step 2 and
-every such word comes out silently wrong — still well-formed Bengali, just not
-the word that was written.
+Every figure below is measured, with its sample size. Re-run them yourself with
+`cargo run --release -p eval`.
 
-## Public API
+| What | Result | Sample |
+|---|---|---|
+| **Conversion**, word accuracy | **99.989%** | 473,244 words |
+| Conversion, character accuracy | 99.997% | 3,879,440 characters |
+| Character grid — every consonant × every vowel and conjunct | **100%** | 3,096 combinations |
+| **Detection**, recall on legacy words | **99.951%** | 154,928 words |
+| **Detection**, false positives on English | **0.006%** | 462,074 words |
+| Detection, false positives on Unicode Bengali | **0.000%** | 343,077 words |
+| Misspellings preserved rather than "corrected" | 99.979% | 14,214 words |
 
-| Item | What it is |
+The detection figures come from a **held-out** half of the data that was never
+looked at while anything was being tuned. The tuning half gave 99.962% and
+0.014% on the same code, so these are not a lucky draw.
+
+### How that was measured, including what it cannot tell you
+
+**Conversion** is measured by round trip: take real Unicode Bengali, encode it
+into Bijoy, convert it back, compare. The source text is the answer key. This
+**cannot detect an error the encoder and the decoder share** — if both are
+wrong in matching ways the word returns intact and the harness sees nothing.
+It is an upper bound.
+
+**Detection** is measured against real documents, which label themselves: a
+`.docx` records the font of every run of text, so a run set in SutonnyMJ *is*
+legacy and an English run *is not*. No hand-labelling, and no asking the code
+under test what it thinks. Runs that declare no font are excluded rather than
+guessed at, as are runs whose declared font contradicts their bytes.
+
+**One figure is deliberately not quoted as a headline.** Converted words found
+in the dictionary, run over real legacy documents, sits at 78.4%. That is a
+*lower* bound, not an error rate: names, places, acronyms and rare words are
+absent from any word list. It is reported by the harness but it should not be
+read as "21.6% wrong" until the residue has been sampled and classified.
+
+## What it converts
+
+| Format | What happens |
 |---|---|
-| `convert(&str) -> String` | Convert legacy text, unconditionally. |
-| `convert_if_legacy(&str) -> (String, Detection)` | Convert only if the whole string looks legacy. |
-| `convert_document(&str) -> DocumentConversion` | Convert **line by line**. Use this for real files. |
-| `detect(&str) -> Detection` | What is this text? Confidence included. |
-| `LegacyEncoding`, `Detection`, `DocumentConversion` | The result types. |
-| `repair_unicode(&str) -> String` | Fix Bengali that is *already* Unicode but was badly converted by something else. |
-| `bengali_is_plausible(&str) -> bool` | Is this text arranged the way Bengali actually works? |
-| `roundtrip::to_bijoy(&str) -> String` | The reverse: Unicode Bengali **into** Bijoy. |
-| `roundtrip::round_trip_report(&str)` | Which words fail to survive a round trip. |
-| `lexicon::STEMS`, `lexicon::reads_as_bengali` | The small Bengali word list used to tell a real conversion from a fake one. |
+| `.txt` `.csv` `.md` `.json` | Converted. Windows-1252 is detected automatically, which is what most legacy Bangla files actually are |
+| `.docx` `.xlsx` `.pptx` | Converted **in place**: formatting, tables, images and layout untouched. Includes SmartArt, charts, speaker notes and comments |
+| `.pdf` | **Read-only, best effort.** Text is extracted and converted; layout is not preserved |
+| Anything else | Left alone |
 
-Use `convert_document` rather than `convert` on anything file-sized. Real
-documents mix encodings — Unicode headings, legacy body text and plain English
-in one file, because they were edited over years by different people. Judging a
-whole file at once lets the majority silently decide for the minority.
+Verified across 300 randomly chosen Office documents from a real archive: word
+count preserved on all 300, whitespace identical on all 300, every archive
+entry intact, no legacy font left behind.
 
-Running `convert` over text that is **already** Unicode will corrupt it. That is
-why `detect` exists.
+### The PDF caveat, in full
 
-## Accuracy, and its caveat
+A PDF has no words and no spaces, only glyphs at coordinates, so spacing is
+inferred and tables come out as running text. Text drawn in a subsetted or
+symbolic font is **skipped and counted**, never guessed at — guessing produces
+convincing Bengali nonsense, which is worse than a gap.
 
-**99.771% character accuracy, 95% CI [99.767, 99.775], measured over 47.3
-million characters** from a large real-world Bengali document archive.
+Measured on 60 legacy-font PDFs: 28 came out good (70%+ real words), 19 fair,
+7 poor, 6 produced no Bengali at all. Median 71.3%. Treat it as a useful
+best effort, not a guarantee.
 
-Read that figure with its caveat, which matters:
+## Why only the right words change
 
-- It comes from **round-trip testing** — take real Unicode Bengali, encode it
-  into Bijoy with `to_bijoy`, convert it back, and compare. The source text is
-  the answer key.
-- Round-trip testing **cannot detect an error where the encoder and the decoder
-  share the same mistake.** If `to_bijoy` and `convert` are wrong in exactly
-  matching ways, the text still comes back intact and the harness sees nothing.
-- So 99.771% is an **upper bound**, not a guarantee.
-- It was measured on **one** archive. Your documents may differ.
+Bijoy **is** ASCII wearing Bengali shapes, so `bvg` is the word নাম and it is
+also three ordinary Latin letters, and nothing inside the word can tell you
+which. Scribe therefore reaches three verdicts, not two — legacy, not legacy,
+and genuinely uncertain — and lets the surrounding words settle the last of
+those. In the measured data, 72% of legacy words that carry *no evidence
+whatsoever* of being legacy are recovered from their neighbours alone.
 
-Nothing here is battle-tested beyond that. It is one measurement, on one body of
-text, by one method with a known blind spot.
-
-## Bijoy variants
-
-"Bijoy" is not a single standard. The tables here are tuned for **SutonnyMJ**
-(and its close relative SutonnyOMJ), which is by far the most common in
-practice. Other Bijoy-family fonts differ in places, and text produced by them
-may convert imperfectly or not at all.
-
-Where a document's real glyphs were found to be missing from the upstream
-reference table, the additions are kept in `CORRECTIONS` in `crates/scribe-core/src/lib.rs` rather
-than merged into the generated tables, so what is ported and what is added
-locally stay visible.
-
-## This is a port, not a model
-
-There is no machine learning here, no training data, no inference. It is a
-deterministic table lookup plus a set of hand-written reordering rules. The same
-input always gives the same output, on any machine, offline.
-
-The mapping tables and the core reordering rules are **ported from
-[`almehady/Bijoy-to-Unicode-File-Converter`](https://github.com/almehady/Bijoy-to-Unicode-File-Converter)
-(MIT)**. Its full licence text is in
-[`THIRD-PARTY-LICENSES`](./THIRD-PARTY-LICENSES) and must ship with any copy of
-this crate.
-
-Two deliberate deviations from that reference:
-
-- It indexes with Python semantics, where `text[i - 1]` at `i == 0` silently
-  returns the *last* character and `text[i + 2]` past the end raises. Both are
-  latent faults. This port treats an out-of-range position as "no character",
-  which is the intended meaning.
-- It moves a `র` + hasant sequence in both directions. A **reph** (`র` before
-  hasant) belongs before its cluster; a **ra-phala** (hasant before `র`) is
-  already in the right place and must not move. Moving both corrupts every word
-  containing a ra-phala.
-
-A second widely-cited Bijoy implementation was examined and **rejected**: it
-carries no licence at all, so copying from it would have been a licence breach.
+The thresholds are deliberately asymmetric. Missing a legacy word leaves it
+unreadable, which is visible and fixable. Converting a word that was *not*
+legacy destroys readable text and the reader may never notice. **When the
+evidence runs out, the answer is "leave it alone".**
 
 ## Building
 
 ```sh
-cargo test --workspace
+cargo test --workspace     # 100+ tests, no network needed
+cargo run -p scribe-app    # the desktop app
 ```
 
-No build script and no network. Bengali text in the tests is either ordinary
-dictionary vocabulary or constructed examples.
+The dictionaries are compiled and checked in, so building needs no corpus and
+no network.
 
-## Where this is going
+## This is not a model
 
-This crate is being built out into **GRU953 Scribe**, an installable desktop
-application for macOS, Windows and Ubuntu, with a command-line tool alongside
-it. Work in progress, in this order:
-
-1. A measurement harness first — accuracy is reported before it is improved.
-2. Word-by-word detection, so only genuinely legacy words are ever rewritten.
-3. A ~466,000-word Bengali dictionary built into the binary, replacing the
-   150 hand-written stems that currently decide what counts as real Bengali.
-4. The desktop app and command-line tool.
-
-The accuracy figures above are the **pre-work baseline** and will be replaced
-by measured ones, with their method and sample size stated alongside.
+No machine learning, no training, no inference. A deterministic table lookup, a
+set of hand-written reordering rules, and two dictionaries. The same input
+always gives the same output, on any machine, offline.
 
 ## Licence
 
-[MIT](./LICENSE). Relicensed from PolyForm Noncommercial 1.0.0 in August 2026,
-so the tool is free for anyone to use, including commercially.
-
-Third-party obligations: see [`THIRD-PARTY-LICENSES`](./THIRD-PARTY-LICENSES).
+[MIT](./LICENSE). Third-party obligations, including the fonts and the word
+lists: [`THIRD-PARTY-LICENSES`](./THIRD-PARTY-LICENSES).

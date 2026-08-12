@@ -9,11 +9,15 @@ Contents
 --------
   1. almehady/Bijoy-to-Unicode-File-Converter — MIT — conversion tables
   2. Note on a second implementation that was deliberately NOT used
-  3. tahmid02016/bangla-wordlist — Unlicense — the embedded dictionary
-  4. The `fst` crate — Unlicense OR MIT — dictionary storage
+  3. tahmid02016/bangla-wordlist — Unlicense — the embedded Bengali dictionary
+  4. The `fst` crate — Unlicense OR MIT — how both dictionaries are stored
+  5. Webster's Second International — public domain — the English word list
+  6. Rust dependencies — an audited summary
+  7. Fonts
 
-Noto Sans and Noto Sans Bengali (SIL Open Font License 1.1) will be added
-here when the desktop app bundles them.
+Every one of the 484 packages in the dependency tree declares a licence, and
+all of them are permissive. Section 6 records the audit and names the five
+that are not simply MIT or Apache-2.0.
 
 
 1. almehady/Bijoy-to-Unicode-File-Converter
@@ -56,9 +60,11 @@ have been a licence breach. Nothing in this crate derives from it.
 
 3. tahmid02016/bangla-wordlist
 -------------------------------
-The 454,649-word Bengali dictionary embedded at
+The 451,348-word Bengali dictionary embedded at
 `crates/scribe-core/data/bengali-words.fst` is compiled from the `words.txt`
-file of this project by `devtools/lexicon-build`.
+file of this project by `devtools/lexicon-build`. (That file holds 454,649
+lines; the difference is spellings that Unicode itself calls equivalent, which
+the builder settles onto one form.)
 
 Source: https://github.com/tahmid02016/bangla-wordlist
 Licence: The Unlicense (public domain)
@@ -104,3 +110,64 @@ Source: https://github.com/BurntSushi/fst
 Licence: Unlicense OR MIT, at the user's option. Both texts are distributed
 with the crate itself; the Unlicense text is reproduced in section 3 above
 and the MIT text in section 1.
+
+
+5. Webster's Second International (via /usr/share/dict/words)
+--------------------------------------------------------------
+The 234,428-word English list embedded at
+`crates/scribe-core/data/english-words.fst` is compiled from the word list
+shipped with macOS and the BSDs, which is Webster's Second International
+(1934). Its copyright has lapsed and it is in the public domain.
+
+Its own README states: "Welcome to web2 (Webster's Second International) all
+234,936 words worth. The 1934 copyright has lapsed, according to the supplier."
+
+It is compiled in rather than read from the operating system at runtime,
+because Windows has no equivalent file and a guard that silently disappears on
+one platform is worse than no guard at all.
+
+
+6. Rust dependencies
+---------------------
+Audited at the Phase 7 release gate. 484 packages in the full tree, every one
+declaring a licence, all permissive. No GPL, AGPL or SSPL anywhere.
+
+Direct dependencies of the shipped crates:
+
+  fst                 Unlicense OR MIT   the two embedded dictionaries
+  quick-xml           MIT                reading and writing Office XML
+  zip                 MIT                Office files are ZIP archives
+  lopdf               MIT                reading PDFs
+  tauri               MIT OR Apache-2.0  the desktop window
+  tauri-plugin-dialog MIT OR Apache-2.0  open and save dialogs
+  serde               MIT OR Apache-2.0  passing data to the window
+
+Where a package offers a choice of licences, this project takes **MIT**.
+
+Five packages in the tree are **MPL-2.0**, all of them part of the web view
+Tauri uses to draw the window:
+
+  cssparser, cssparser-macros, dtoa-short, option-ext, selectors
+
+MPL-2.0 is file-level copyleft. It permits distribution inside a larger MIT
+work; the obligation is to publish modifications to the MPL-licensed files
+themselves. None of them are modified here. Their source is available from
+crates.io and from the Mozilla project.
+
+One package (`r-efi`) offers "MIT OR Apache-2.0 OR LGPL-2.1-or-later". The MIT
+option is taken; no LGPL obligation arises.
+
+Full licence texts for every dependency can be regenerated at any time with
+`cargo license` or `cargo about`.
+
+
+7. Fonts
+---------
+The interface names **Noto Sans** and **Noto Sans Bengali**, both under the
+SIL Open Font License 1.1.
+
+**Not yet bundled**, and this is stated rather than implied: the application
+currently falls back to whatever Bengali font the operating system provides.
+macOS and Windows both ship one; a minimal Linux installation may not, in
+which case Bengali will not render correctly. When the fonts are bundled, the
+full OFL 1.1 text and the reserved font name notice must be included here.

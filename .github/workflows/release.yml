@@ -1,0 +1,117 @@
+# Build the installers for macOS, Windows and Ubuntu.
+#
+# Runs only when a version tag is pushed, or when started by hand. It never
+# runs on an ordinary commit: building three platforms takes real minutes, and
+# on a private repository those minutes come out of your account's quota.
+#
+# **Nothing here is signed.** Signing needs a paid Apple Developer account and
+# a Windows certificate, and neither is set up. The first time somebody opens
+# the app their operating system will warn them it is from an unidentified
+# developer. That is expected, it is written in the release notes, and it is
+# not a sign anything is wrong.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Both Mac architectures. A universal build would be neater but
+          # doubles the build time for a tool most people will run on one
+          # machine, so the two are shipped separately and named clearly.
+          - os: macos-latest
+            label: macOS (Apple silicon)
+            target: aarch64-apple-darwin
+          - os: macos-13
+            label: macOS (Intel)
+            target: x86_64-apple-darwin
+          - os: ubuntu-22.04
+            label: Ubuntu
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            label: Windows
+            target: x86_64-pc-windows-msvc
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Ubuntu 22.04 rather than latest: the webkit2gtk package name changed,
+      # and pinning it here means a release does not break the day the runner
+      # image moves on.
+      - name: Install the desktop app's Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev libssl-dev patchelf build-essential file
+
+      # The tests must pass on the machine that builds the installer, not
+      # merely on some other machine earlier.
+      - name: Test
+        run: cargo test --workspace --release
+
+      - name: Build the command-line tool
+        run: cargo build --release -p scribe-cli --target ${{ matrix.target }}
+
+      - name: Build the app installer
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: crates/scribe-app
+          args: --target ${{ matrix.target }}
+
+      - name: Collect what was built
+        shell: bash
+        run: |
+          mkdir -p out
+          # The command-line tool, under a name that says which machine it is for.
+          for f in target/${{ matrix.target }}/release/scribe target/${{ matrix.target }}/release/scribe.exe; do
+            [ -f "$f" ] && cp "$f" "out/scribe-${{ matrix.target }}${f##*scribe}"
+          done
+          # Installers, wherever this platform's bundler put them.
+          find target -path '*/release/bundle/*' \
+            \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' \) \
+            -exec cp {} out/ \; 2>/dev/null || true
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gru953-scribe-${{ matrix.target }}
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    name: Attach to the release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: all
+      - name: Draft the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: all/**/*
+          # A draft, never a live release. Publishing is a decision a person
+          # makes, after reading the notes and trying at least one installer.
+          draft: true
+          generate_release_notes: true
