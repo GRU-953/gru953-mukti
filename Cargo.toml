@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/scribe-core", "devtools/lexicon-build"]
+members = ["crates/scribe-core", "devtools/lexicon-build", "devtools/corpus-label"]
 
 # Shared metadata. Every crate in the workspace inherits these with
 # `field.workspace = true`, so the version and licence are stated once.

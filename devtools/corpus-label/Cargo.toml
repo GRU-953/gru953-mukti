@@ -1,0 +1,17 @@
+[package]
+name = "corpus-label"
+description = "Harvests labelled legacy/non-legacy tokens from real Office documents, using each run's declared font as the label. Development tool; not shipped."
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+quick-xml = "0.37"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[lints]
+workspace = true
