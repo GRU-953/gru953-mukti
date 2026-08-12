@@ -182,6 +182,10 @@ the text. Those cases are the most valuable.
 
 Work happens on `development`; `main` is what was last released.
 
+If you are picking this project up rather than dipping into it, start with
+[`HANDOVER.md`](./HANDOVER.md) — how it is built, how the accuracy was measured,
+what is still open, and the traps that cost time here.
+
 ## Licence
 
 [MIT](./LICENSE). Third-party obligations, including the fonts and the word
