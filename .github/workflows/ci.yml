@@ -1,4 +1,4 @@
-# Build and test GRU953 Scribe on all three platforms it ships to.
+# Build and test GRU953 Mukti on all three platforms it ships to.
 #
 # Running the matrix from the very first commit is deliberate: a break that
 # only shows on Windows or Ubuntu is caught the day it lands, not months later

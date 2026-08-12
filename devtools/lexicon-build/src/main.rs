@@ -1,14 +1,14 @@
-//! Compile a Bengali word list into the compressed dictionary Scribe embeds.
+//! Compile a Bengali word list into the compressed dictionary Mukti embeds.
 //!
 //! Run once, by hand, when the word list changes. The output is checked in;
-//! building Scribe itself never needs the corpus, a network, or this tool.
+//! building Mukti itself never needs the corpus, a network, or this tool.
 //!
 //! # Two dictionaries, for two different reasons
 //!
 //! **Shipped** (`--mode shipped`, the default) is built from `words.txt` alone
 //! — 454,649 words, released into the public domain under the Unlicense at
 //! `github.com/tahmid02016/bangla-wordlist`. It is the only file in the corpus
-//! whose licence is known, which is what makes it the only one Scribe may
+//! whose licence is known, which is what makes it the only one Mukti may
 //! redistribute. It also happens to be the largest, covering 97.6% of every
 //! distinct word in the whole collection.
 //!
@@ -31,7 +31,7 @@ use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-use gru953_scribe::roundtrip::normalise_nukta;
+use gru953_mukti::roundtrip::normalise_nukta;
 
 /// The only word list whose licence is known, and so the only one that ships.
 const SHIPPED_SOURCE: &str = "words.txt";
@@ -140,7 +140,7 @@ fn clean(line: &str, mode: &Mode) -> Option<String> {
         // render identically. The source list spells 3,700 of its words the
         // decomposed way. A dictionary holding both spellings would still tell
         // the next caller their perfectly ordinary word does not exist, so it
-        // settles on the composed form — which is what Scribe itself produces.
+        // settles on the composed form — which is what Mukti itself produces.
         .replace("\u{09C7}\u{09BE}", "\u{09CB}")
         .replace("\u{09C7}\u{09D7}", "\u{09CC}");
     if word.is_empty() {
@@ -210,14 +210,14 @@ impl Args {
         let out = out.unwrap_or_else(|| match mode {
             Mode::Shipped => default_shipped_out(),
             Mode::Extended => PathBuf::from("local/extended-words.fst"),
-            Mode::English => PathBuf::from("crates/scribe-core/data/english-words.fst"),
+            Mode::English => PathBuf::from("crates/mukti-core/data/english-words.fst"),
         });
         Ok(Args { corpus, out, mode })
     }
 }
 
 fn default_shipped_out() -> PathBuf {
-    Path::new("crates/scribe-core/data/bengali-words.fst").to_path_buf()
+    Path::new("crates/mukti-core/data/bengali-words.fst").to_path_buf()
 }
 
 const USAGE: &str = "\

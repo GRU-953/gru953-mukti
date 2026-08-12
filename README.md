@@ -1,4 +1,4 @@
-# GRU953 Scribe
+# GRU953 Mukti
 
 **Turn legacy Bijoy / SutonnyMJ Bangla into Unicode — word by word, leaving
 everything else alone.**
@@ -8,7 +8,7 @@ letters that *look* Bangla because a font draws Bangla shapes over them. They
 cannot be searched, cannot be spell-checked, and become nonsense on any machine
 without that font.
 
-Scribe converts them. English, numbers, and Bangla that is already correct come
+Mukti converts them. English, numbers, and Bangla that is already correct come
 through **byte for byte unchanged**.
 
 ```
@@ -23,16 +23,16 @@ Works completely offline. No account, no upload, no network.
 
 ## Install
 
-Download from the [latest release](https://github.com/GRU-953/gru953-scribe-rs/releases/latest).
+Download from the [latest release](https://github.com/GRU-953/gru953-mukti-rs/releases/latest).
 
 | Your computer | Download |
 |---|---|
-| **macOS** (Intel or Apple silicon) | `GRU953.Scribe_0.3.0_universal.dmg` |
-| **Windows** | `GRU953.Scribe_0.3.0_x64-setup.exe` |
-| **Ubuntu / Debian** | `GRU953.Scribe_0.3.0_amd64.deb` |
-| **Other Linux** | `GRU953.Scribe_0.3.0_amd64.AppImage` |
+| **macOS** (Intel or Apple silicon) | `GRU953.Mukti_0.4.0_universal.dmg` |
+| **Windows** | `GRU953.Mukti_0.4.0_x64-setup.exe` |
+| **Ubuntu / Debian** | `GRU953.Mukti_0.4.0_amd64.deb` |
+| **Other Linux** | `GRU953.Mukti_0.4.0_amd64.AppImage` |
 
-For the command line, download the `scribe-*` file for your platform and put it
+For the command line, download the `mukti-*` file for your platform and put it
 on your `PATH`.
 
 > **The installers are not signed.** macOS will say "unidentified developer" —
@@ -43,15 +43,15 @@ on your `PATH`.
 ## Use it
 
 **In the app:** paste text on the left, or drop a file on the window. The result
-appears on the right. **Show what changed** marks every word Scribe touched, so
+appears on the right. **Show what changed** marks every word Mukti touched, so
 you can check its judgement rather than trust it.
 
 **On the command line:**
 
 ```sh
-scribe check report.docx     # say what would change, write nothing
-scribe convert report.docx   # writes report.unicode.docx, formatting intact
-scribe convert *.txt         # many files at once
+mukti check report.docx     # say what would change, write nothing
+mukti convert report.docx   # writes report.unicode.docx, formatting intact
+mukti convert *.txt         # many files at once
 ```
 
 Your original is never overwritten unless you type `--in-place`.
@@ -116,7 +116,7 @@ words), 19 fair, 7 poor, 6 produced nothing. Median 71.3%.
 Bijoy **is** ASCII wearing Bangla shapes. `bvg` is the word নাম, and it is also
 three ordinary Latin letters, and nothing inside the word can tell you which.
 
-So Scribe reaches **three** verdicts, not two — legacy, not legacy, and
+So Mukti reaches **three** verdicts, not two — legacy, not legacy, and
 genuinely uncertain — and lets the surrounding words settle the last of them. In
 the measured data, **72% of legacy words carrying no evidence at all** of being
 legacy are recovered from their neighbours alone.
@@ -147,8 +147,8 @@ rules, and two dictionaries built into the binary: 451,348 Bangla words and
 
 ```sh
 cargo test --workspace     # 105 tests, no network needed
-cargo run -p scribe-app    # the desktop app
-cargo run -p scribe-cli    # the command-line tool
+cargo run -p mukti-app    # the desktop app
+cargo run -p mukti-cli    # the command-line tool
 ```
 
 The dictionaries are compiled and checked in, so building needs no corpus and no
@@ -157,10 +157,10 @@ is in `.github/workflows/release.yml`.
 
 | Crate | What it is |
 |---|---|
-| `crates/scribe-core` | The converter, the detector, the dictionaries |
-| `crates/scribe-formats` | Word, Excel, PowerPoint and PDF handling |
-| `crates/scribe-cli` | The `scribe` command |
-| `crates/scribe-app` | The desktop app (Tauri) |
+| `crates/mukti-core` | The converter, the detector, the dictionaries |
+| `crates/mukti-formats` | Word, Excel, PowerPoint and PDF handling |
+| `crates/mukti-cli` | The `mukti` command |
+| `crates/mukti-app` | The desktop app (Tauri) |
 | `devtools/` | Dictionary builder, corpus labeller, accuracy harness. Not shipped |
 
 ## Known limitations
@@ -187,4 +187,4 @@ Work happens on `development`; `main` is what was last released.
 [MIT](./LICENSE). Third-party obligations, including the fonts and the word
 lists: [`THIRD-PARTY-LICENSES`](./THIRD-PARTY-LICENSES).
 
-More: [how to use it](./USING-SCRIBE.md) · [what changed](./CHANGELOG.md)
+More: [how to use it](./USING-MUKTI.md) · [what changed](./CHANGELOG.md)

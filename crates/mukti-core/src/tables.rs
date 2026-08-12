@@ -1,4 +1,4 @@
-//! GRU953-Scribe mapping tables — GENERATED, DO NOT EDIT BY HAND.
+//! GRU953-Mukti mapping tables — GENERATED, DO NOT EDIT BY HAND.
 //!
 //! Ported from almehady/Bijoy-to-Unicode-File-Converter, MIT licensed; its
 //! full licence text is reproduced in `THIRD-PARTY-LICENSES` at the root of

@@ -1,4 +1,4 @@
-//! Measure what GRU953 Scribe actually does, before anyone tries to improve it.
+//! Measure what GRU953 Mukti actually does, before anyone tries to improve it.
 //!
 //! Five measurements of conversion and one of detection. Each prints its
 //! sample size and, where it is a proportion, a 95% confidence interval. A
@@ -26,16 +26,16 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use gru953_scribe::classify::{classify_words, Verdict};
-use gru953_scribe::dictionary::Dictionary;
-use gru953_scribe::roundtrip::{is_testable_word, normalise_nukta, to_bijoy};
-use gru953_scribe::{convert, detect, word_is_well_formed, LegacyEncoding};
+use gru953_mukti::classify::{classify_words, Verdict};
+use gru953_mukti::dictionary::Dictionary;
+use gru953_mukti::roundtrip::{is_testable_word, normalise_nukta, to_bijoy};
+use gru953_mukti::{convert, detect, word_is_well_formed, LegacyEncoding};
 use stats::{edit_distance, thousands, Proportion};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::parse()?;
 
-    println!("GRU953 Scribe — accuracy report");
+    println!("GRU953 Mukti — accuracy report");
     println!("================================\n");
 
     m1_round_trip(&cfg)?;
@@ -85,12 +85,12 @@ fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
             continue;
         }
         // The word list has typing slips in it — a vowel sign struck twice, two
-        // signs on one consonant, `আ` typed as `অ` plus a matra. Scribe's repair
+        // signs on one consonant, `আ` typed as `অ` plus a matra. Mukti's repair
         // passes turn these into the correct spelling, which is what they are
         // for, and the round trip then scores that correction as a failure.
         //
         // They are set aside on an orthographic test that knows nothing about
-        // Scribe: each is a sequence Bengali does not permit at all. The count
+        // Mukti: each is a sequence Bengali does not permit at all. The count
         // is printed, so this is never a silent exclusion of whatever failed.
         if !word_is_well_formed(word) {
             malformed += 1;
@@ -121,12 +121,12 @@ fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
     println!("  Word accuracy       {}", words.describe());
     println!("  Character accuracy  {}", chars.describe());
     // Printed even when it matches, because a match is itself the finding: it
-    // says Scribe's output is already canonically spelled, so normalising
+    // says Mukti's output is already canonically spelled, so normalising
     // before comparison is not quietly doing work to flatter the figure.
     println!("  Same, comparing exact bytes rather than canonical spellings:");
     println!("    Word accuracy     {}", exact.describe());
     if words_exact == words_ok {
-        println!("    Identical, which is the point: Scribe's output is already canonically");
+        println!("    Identical, which is the point: Mukti's output is already canonically");
         println!("    spelled, so normalising before comparison changes nothing here.");
     } else {
         println!("    The gap is canonically equivalent spellings — a two-part vowel written");
@@ -141,8 +141,8 @@ fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
         "    {:>6}  not well-formed Bengali in the source: a vowel sign struck twice, two",
         thousands(malformed)
     );
-    println!("            on one consonant, or `আ` typed as `অ` plus a matra. Scribe repairs");
-    println!("            these to the correct spelling; the word list, not Scribe, is wrong.");
+    println!("            on one consonant, or `আ` typed as `অ` plus a matra. Mukti repairs");
+    println!("            these to the correct spelling; the word list, not Mukti, is wrong.");
     gate("word accuracy", words.rate(), 0.99);
     top_patterns(&patterns, "  Most common failures");
     Ok(())
@@ -179,7 +179,7 @@ fn m2_character_grid(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
         // Two kinds of entry in this file are not cells of the grid, and both
         // are counted and named below rather than quietly dropped. Excluding
         // whatever fails is how a harness flatters itself, so each exclusion
-        // has to answer to a test that has nothing to do with Scribe.
+        // has to answer to a test that has nothing to do with Mukti.
         //
         // First, the file's own legend. Lines 3 and 4 list the vowel signs
         // (`া ি ী ু ৃ ে ৈ ো ৌ`) and the phala forms (`্য ্র ্ন ্ম ্ল ্ব`) — the
@@ -192,7 +192,7 @@ fn m2_character_grid(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
         // Second, five mistyped cells. Each is a vowel sign next to a hasant,
         // which Bengali orthography does not permit because a vowel closes its
         // syllable and leaves the hasant nothing to join. In every case the
-        // other seven cells of the same row are spelled correctly, and Scribe
+        // other seven cells of the same row are spelled correctly, and Mukti
         // converts these to the spelling the row implies.
         if !word_is_well_formed(token) {
             mistyped += 1;
@@ -218,8 +218,8 @@ fn m2_character_grid(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
     println!("    {legend:>3}  legend entries — the grid's own headings, not words");
     println!("    {mistyped:>3}  cells mistyped in the source file: a vowel sign beside a hasant,");
     println!("         which Bengali does not permit. The rest of each such row is spelled");
-    println!("         correctly and Scribe produces that spelling. The grid is wrong here,");
-    println!("         not Scribe — and it is judged so by orthography, not by agreeing with us.");
+    println!("         correctly and Mukti produces that spelling. The grid is wrong here,");
+    println!("         not Mukti — and it is judged so by orthography, not by agreeing with us.");
     gate("character grid", p.rate(), 1.0);
     top_patterns(&patterns, "  Combinations that fail");
     Ok(())
@@ -289,7 +289,7 @@ fn m3_dictionary_on_real_documents(cfg: &Config) -> Result<(), Box<dyn std::erro
 /// The converter must not quietly tidy up spelling.
 ///
 /// `wrong_file.txt` is 14,214 deliberately misspelled Bengali words: হ্রস্ব-ই
-/// swapped for দীর্ঘ-ঈ, হ্রস্ব-উ for দীর্ঘ-ঊ, hasanta dropped. Scribe carries a
+/// swapped for দীর্ঘ-ঈ, হ্রস্ব-উ for দীর্ঘ-ঊ, hasanta dropped. Mukti carries a
 /// repair pass for mistyped vowels, and the risk it creates is real — a repair
 /// that fires too eagerly would "fix" text nobody asked it to touch, and the
 /// user would never know their document had been altered.
@@ -333,7 +333,7 @@ fn m4_vowel_preservation(cfg: &Config) -> Result<(), Box<dyn std::error::Error>>
 // Detection
 // ---------------------------------------------------------------------------
 
-/// Does Scribe convert **only** what is genuinely legacy?
+/// Does Mukti convert **only** what is genuinely legacy?
 ///
 /// Measured on the held-out half of the labelled set, one token at a time.
 ///
@@ -675,7 +675,7 @@ fn is_leading_mark(c: char) -> bool {
 ///   legally, `ে` followed by `া` (U+09C7 U+09BE). They are *canonically
 ///   equivalent* — Unicode's own composition turns the second into the first —
 ///   and they render identically. The source word list spells 3,700 of its
-///   words the decomposed way; Scribe composes them, which is the normalised
+///   words the decomposed way; Mukti composes them, which is the normalised
 ///   form and arguably the better output. Counting those as conversion errors
 ///   measured a spelling convention rather than the converter.
 /// * **The nukta**, for the same reason, already handled by `normalise_nukta`.

@@ -324,10 +324,10 @@ mod tests {
 
 use std::io::{Cursor, Write as _};
 
-use gru953_scribe::classify::{classify_words, Verdict};
-use gru953_scribe::convert;
-use gru953_scribe::dictionary::Dictionary;
-use gru953_scribe::tokenise::{tokenise, Kind};
+use gru953_mukti::classify::{classify_words, Verdict};
+use gru953_mukti::convert;
+use gru953_mukti::dictionary::Dictionary;
+use gru953_mukti::tokenise::{tokenise, Kind};
 use quick_xml::events::{BytesText, Event as XmlEvent};
 use quick_xml::Writer;
 

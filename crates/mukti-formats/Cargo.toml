@@ -1,5 +1,5 @@
 [package]
-name = "scribe-formats"
+name = "mukti-formats"
 description = "Read and rewrite the text inside Word, Excel and PowerPoint files, keeping everything else exactly as it was."
 version.workspace = true
 edition.workspace = true
@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-gru953-scribe = { path = "../scribe-core", version = "0.3.0" }
+gru953-mukti = { path = "../mukti-core", version = "0.4.0" }
 quick-xml = "0.37"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 lopdf = "0.36"

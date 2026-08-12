@@ -36,7 +36,7 @@ use lopdf::content::Content;
 use lopdf::{Document, Object};
 
 use crate::office::Summary;
-use gru953_scribe::encoding::from_windows_1252;
+use gru953_mukti::encoding::from_windows_1252;
 
 /// How much of a gap counts as a space.
 ///
@@ -256,7 +256,7 @@ fn convert_marked(text: &str, marks: &[FontKind], summary: &mut Summary) -> Stri
         let word: String = chars[start..i].iter().collect();
         let legacy = marks[start..i].contains(&FontKind::LegacyBijoy);
         if legacy {
-            out.push_str(&gru953_scribe::convert(&word));
+            out.push_str(&gru953_mukti::convert(&word));
             summary.words_converted += 1;
         } else {
             out.push_str(&word);

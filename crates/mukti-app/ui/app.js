@@ -1,4 +1,4 @@
-// GRU953 Scribe — the window's behaviour.
+// GRU953 Mukti — the window's behaviour.
 //
 // Plain JavaScript, no framework and no build step. Everything the converter
 // decides happens in Rust; this file only draws the answer and gets out of

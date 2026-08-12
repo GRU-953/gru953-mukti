@@ -1,6 +1,6 @@
 [package]
 name = "lexicon-build"
-description = "Compiles the Bengali word list into the compressed dictionary GRU953 Scribe embeds. Development tool; not shipped."
+description = "Compiles the Bengali word list into the compressed dictionary GRU953 Mukti embeds. Development tool; not shipped."
 publish = false
 version.workspace = true
 edition.workspace = true
@@ -11,7 +11,7 @@ authors.workspace = true
 
 [dependencies]
 fst = "0.4"
-gru953-scribe = { path = "../../crates/scribe-core" }
+gru953-mukti = { path = "../../crates/mukti-core" }
 
 [lints]
 workspace = true

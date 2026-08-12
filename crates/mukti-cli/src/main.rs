@@ -1,4 +1,4 @@
-//! GRU953 Scribe on the command line.
+//! GRU953 Mukti on the command line.
 //!
 //! Converts legacy Bijoy/SutonnyMJ Bangla into Unicode, **word by word**, so
 //! English, numbers and Bengali that is already Unicode come through exactly
@@ -20,20 +20,20 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use gru953_scribe::classify::{classify_words, Verdict};
-use gru953_scribe::convert;
-use gru953_scribe::dictionary::Dictionary;
-use gru953_scribe::encoding::{decode, TextEncoding};
-use gru953_scribe::tokenise::{tokenise, Kind};
-use scribe_formats::{convert_office, convert_pdf_to_text};
+use gru953_mukti::classify::{classify_words, Verdict};
+use gru953_mukti::convert;
+use gru953_mukti::dictionary::Dictionary;
+use gru953_mukti::encoding::{decode, TextEncoding};
+use gru953_mukti::tokenise::{tokenise, Kind};
+use mukti_formats::{convert_office, convert_pdf_to_text};
 
 const USAGE: &str = "\
-GRU953 Scribe — convert legacy Bangla text to Unicode.
+GRU953 Mukti — convert legacy Bangla text to Unicode.
 
-  scribe convert <file>...    convert files, writing a new file beside each one
+  mukti convert <file>...    convert files, writing a new file beside each one
                              (.txt .csv .md .json and .docx .xlsx .pptx)
-  scribe check <file>...      say what would change, and write nothing
-  scribe convert -            read from the keyboard or a pipe, write to screen
+  mukti check <file>...      say what would change, and write nothing
+  mukti convert -            read from the keyboard or a pipe, write to screen
 
 Options
   --font <name>     the Bengali font to set in Office files (default: Nirmala UI)
@@ -44,9 +44,9 @@ Options
   --help            print this
 
 Examples
-  scribe convert report.txt              writes report.unicode.txt
-  scribe check *.txt                     shows what would change, changes nothing
-  cat old.txt | scribe convert -         converts a pipe
+  mukti convert report.txt              writes report.unicode.txt
+  mukti check *.txt                     shows what would change, changes nothing
+  cat old.txt | mukti convert -         converts a pipe
 ";
 
 fn main() -> ExitCode {
@@ -66,7 +66,7 @@ fn run() -> Result<ExitCode, String> {
         return Ok(ExitCode::SUCCESS);
     }
     if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("GRU953 Scribe {}", env!("CARGO_PKG_VERSION"));
+        println!("GRU953 Mukti {}", env!("CARGO_PKG_VERSION"));
         return Ok(ExitCode::SUCCESS);
     }
 

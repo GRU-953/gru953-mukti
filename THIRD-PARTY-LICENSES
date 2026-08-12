@@ -1,7 +1,7 @@
-Third-party licences for GRU953 Scribe
+Third-party licences for GRU953 Mukti
 ======================================
 
-GRU953 Scribe is itself MIT licensed (see LICENSE). It also contains code
+GRU953 Mukti is itself MIT licensed (see LICENSE). It also contains code
 ported from, and assets produced by, the projects below. Their licences are
 reproduced in full and must be distributed with any copy of this software.
 
@@ -22,8 +22,8 @@ that are not simply MIT or Apache-2.0.
 
 1. almehady/Bijoy-to-Unicode-File-Converter
 -------------------------------------------
-The character mapping tables in `crates/scribe-core/src/tables.rs` and the
-reordering rules in `crates/scribe-core/src/lib.rs` are ported from this
+The character mapping tables in `crates/mukti-core/src/tables.rs` and the
+reordering rules in `crates/mukti-core/src/lib.rs` are ported from this
 project.
 
 Source: https://github.com/almehady/Bijoy-to-Unicode-File-Converter
@@ -61,7 +61,7 @@ have been a licence breach. Nothing in this crate derives from it.
 3. tahmid02016/bangla-wordlist
 -------------------------------
 The 451,348-word Bengali dictionary embedded at
-`crates/scribe-core/data/bengali-words.fst` is compiled from the `words.txt`
+`crates/mukti-core/data/bengali-words.fst` is compiled from the `words.txt`
 file of this project by `devtools/lexicon-build`. (That file holds 454,649
 lines; the difference is spellings that Unicode itself calls equivalent, which
 the builder settles onto one form.)
@@ -115,7 +115,7 @@ and the MIT text in section 1.
 5. Webster's Second International (via /usr/share/dict/words)
 --------------------------------------------------------------
 The 234,428-word English list embedded at
-`crates/scribe-core/data/english-words.fst` is compiled from the word list
+`crates/mukti-core/data/english-words.fst` is compiled from the word list
 shipped with macOS and the BSDs, which is Webster's Second International
 (1934). Its copyright has lapsed and it is in the public domain.
 
@@ -162,7 +162,7 @@ Full licence texts for every dependency can be regenerated at any time with
 
 7. Fonts — Noto Sans and Noto Sans Bengali
 -------------------------------------------
-Both bundled with the desktop app, at `crates/scribe-app/ui/fonts/`:
+Both bundled with the desktop app, at `crates/mukti-app/ui/fonts/`:
 
   NotoSans-variable.ttf           1,581,884 bytes
   NotoSansBengali-variable.ttf      372,212 bytes
@@ -181,7 +181,7 @@ the fonts' licence — the wrong licence, attached to the wrong thing, in the
 one file whose whole job is to get that right.
 
 The OFL requires this text to travel with the fonts. It is reproduced in full
-below and kept beside them at `crates/scribe-app/ui/fonts/OFL.txt`.
+below and kept beside them at `crates/mukti-app/ui/fonts/OFL.txt`.
 
 Its conditions are not a constraint on this project: the fonts are shipped
 unmodified, inside a larger work, under their own names, and are not sold on

@@ -2,7 +2,7 @@
 //!
 //! # Why this can be trusted
 //!
-//! Scribe has never had test data with a known correct answer at the scale
+//! Mukti has never had test data with a known correct answer at the scale
 //! needed to measure detection. Round-trip testing manufactures an answer key
 //! for *conversion*, but it cannot say anything about *detection* — it never
 //! sees a word that should have been left alone.
@@ -26,7 +26,7 @@
 //! splitting at token level would put near-duplicates on both sides and every
 //! reported figure would be flattering and wrong.
 
-use scribe_formats::office;
+use mukti_formats::office;
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -35,8 +35,8 @@ use std::path::{Path, PathBuf};
 
 /// Legacy Bangla fonts, lower-cased for comparison.
 ///
-/// The two Sutonny variants are what Scribe converts. The rest are recorded
-/// separately so the harness can report honestly on text Scribe is **not**
+/// The two Sutonny variants are what Mukti converts. The rest are recorded
+/// separately so the harness can report honestly on text Mukti is **not**
 /// claiming to handle, rather than quietly scoring itself on it.
 const SUTONNY: &[&str] = &["sutonnymj", "sutonnyomj", "sutonnyemj"];
 const OTHER_LEGACY: &[&str] = &[
@@ -61,7 +61,7 @@ enum Label {
     /// without the font that this label is derived from. Reported as its own
     /// class rather than folded into either side.
     LegacyAscii,
-    /// A run in some other legacy font. Scribe does not claim to convert
+    /// A run in some other legacy font. Mukti does not claim to convert
     /// these; kept so that can be stated with a number beside it.
     OtherLegacy,
     /// Contains Unicode Bengali. **Must never be converted** — doing so is the
@@ -169,7 +169,7 @@ fn classify(token: &str, font: Option<&str>) -> Label {
     // This is not hypothetical. Converting the archive's `.doc` files to
     // `.docx` with LibreOffice dropped the font attribution on many runs, and
     // without this guard those runs were labelled English — so genuine Bijoy
-    // such as `Kg©m~wP` counted as a false positive when Scribe correctly
+    // such as `Kg©m~wP` counted as a false positive when Mukti correctly
     // turned it into কর্মসূচি. Left in, it would have made a correct
     // classifier look broken, which is the most expensive kind of wrong
     // measurement there is.

@@ -1,5 +1,5 @@
 [package]
-name = "gru953-scribe"
+name = "gru953-mukti"
 description = "Deterministic Bijoy/SutonnyMJ legacy Bangla to Unicode converter, with a reverse encoder used for accuracy measurement."
 readme = "../../README.md"
 keywords = ["bengali", "bangla", "bijoy", "sutonnymj", "unicode"]

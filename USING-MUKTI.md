@@ -1,4 +1,4 @@
-# Using GRU953 Scribe
+# Using GRU953 Mukti
 
 A short guide for anyone who has old Bangla documents that come out as
 gibberish. No technical knowledge assumed.
@@ -10,7 +10,7 @@ computer. It is English letters that *look* Bangla because a special font
 draws Bangla shapes on top of them. So the text cannot be searched, cannot be
 spell-checked, and turns into nonsense on any machine without that font.
 
-Scribe turns it into proper Unicode Bangla, which every modern computer and
+Mukti turns it into proper Unicode Bangla, which every modern computer and
 phone understands.
 
 **It changes only the legacy Bangla.** English, numbers, and Bangla that is
@@ -18,10 +18,10 @@ already correct are left exactly as they were.
 
 ## Using the app
 
-1. Open **GRU953 Scribe**.
+1. Open **GRU953 Mukti**.
 2. Paste your text into the box on the left, or drag a file onto the window.
 3. The result appears on the right, straight away.
-4. Click **Show what changed** to see exactly which words Scribe touched.
+4. Click **Show what changed** to see exactly which words Mukti touched.
    Converted words are tinted and underlined; everything else it left alone.
 5. Click **Copy** to take the result, or **Save as…** to write a file.
 
@@ -31,7 +31,7 @@ The line at the bottom always tells you how many words changed. If it says
 ### Converting a whole document
 
 Drag a Word, Excel or PowerPoint file onto the window, or use **Open a file**.
-Scribe converts the Bangla inside it and leaves the formatting, tables and
+Mukti converts the Bangla inside it and leaves the formatting, tables and
 pictures exactly as they were.
 
 ## Using it from the command line
@@ -41,29 +41,29 @@ If you have many files, this is much faster.
 **See what would change, without changing anything:**
 
 ```bash
-scribe check report.docx
+mukti check report.docx
 ```
 
 **Convert a file.** The original is never touched — you get a new file beside
 it, called `report.unicode.docx`:
 
 ```bash
-scribe convert report.docx
+mukti convert report.docx
 ```
 
 **Convert many files at once:**
 
 ```bash
-scribe convert *.docx
+mukti convert *.docx
 ```
 
 **Replace the original instead** (only if you are sure, and have a backup):
 
 ```bash
-scribe convert report.docx --in-place
+mukti convert report.docx --in-place
 ```
 
-## What Scribe can open
+## What Mukti can open
 
 | Kind of file | What you get |
 |---|---|
@@ -79,16 +79,16 @@ Word, Excel or PowerPoint and use *Save As* to make a `.docx`, `.xlsx` or
 
 ## Things worth knowing
 
-**Nothing leaves your computer.** Scribe works entirely offline. There is no
+**Nothing leaves your computer.** Mukti works entirely offline. There is no
 account, no upload and no internet connection needed.
 
-**It errs on the side of leaving text alone.** If Scribe cannot tell whether
+**It errs on the side of leaving text alone.** If Mukti cannot tell whether
 something is legacy Bangla, it does nothing. Missing a word is annoying but
 obvious; changing a word that should not have changed is much harder to spot.
 
 **PDFs are a best effort.** A PDF has no words or spaces inside it, only
 letter shapes at positions, so spacing has to be guessed and tables come out
-as ordinary running text. Some PDFs convert well, some poorly. Where Scribe
+as ordinary running text. Some PDFs convert well, some poorly. Where Mukti
 cannot read a piece of text safely, it leaves it out and tells you how much,
 rather than inventing Bangla that looks convincing and is wrong.
 
@@ -109,9 +109,9 @@ app, which carries its own Bangla font. If you see it in a converted file
 opened elsewhere, that programme is missing a Bangla font; install *Noto Sans
 Bengali*, which is free.
 
-**A word did not convert** — Scribe was not confident enough. This happens
+**A word did not convert** — Mukti was not confident enough. This happens
 most with single words, names, and text that is mostly numbers. Converting the
-whole document rather than a fragment usually helps, because Scribe reads the
+whole document rather than a fragment usually helps, because Mukti reads the
 surrounding words to make up its mind.
 
 **A word converted that should not have** — this should be rare: measured at

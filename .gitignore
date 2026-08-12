@@ -10,3 +10,6 @@
 
 # The studio's working memory. Local to this machine, never shipped.
 /Dev-Memory/
+
+# Tauri regenerates these on every build; they are not source.
+/crates/mukti-app/gen/

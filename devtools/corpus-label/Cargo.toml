@@ -10,7 +10,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-scribe-formats = { path = "../../crates/scribe-formats" }
+mukti-formats = { path = "../../crates/mukti-formats" }
 
 [lints]
 workspace = true

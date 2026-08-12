@@ -1,0 +1,20 @@
+[package]
+name = "mukti-cli"
+description = "GRU953 Mukti on the command line: convert legacy Bangla files to Unicode."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "mukti"
+path = "src/main.rs"
+
+[dependencies]
+gru953-mukti = { path = "../mukti-core", version = "0.4.0" }
+mukti-formats = { path = "../mukti-formats", version = "0.4.0" }
+
+[lints]
+workspace = true

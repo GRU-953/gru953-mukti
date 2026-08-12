@@ -1,6 +1,6 @@
 [package]
-name = "scribe-app"
-description = "GRU953 Scribe — the desktop app."
+name = "mukti-app"
+description = "GRU953 Mukti — the desktop app."
 # Not published to crates.io: this is an application, not a library. It is
 # distributed as a signed-in-future installer from the GitHub releases page,
 # and it cannot build without system webkit packages anyway.
@@ -16,7 +16,7 @@ authors.workspace = true
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-gru953-scribe = { path = "../scribe-core", version = "0.3.0" }
+gru953-mukti = { path = "../mukti-core", version = "0.4.0" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }

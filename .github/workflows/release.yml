@@ -86,21 +86,21 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "macOS" ]; then
-            cargo build --release -p scribe-cli --target aarch64-apple-darwin
-            cargo build --release -p scribe-cli --target x86_64-apple-darwin
+            cargo build --release -p mukti-cli --target aarch64-apple-darwin
+            cargo build --release -p mukti-cli --target x86_64-apple-darwin
             mkdir -p target/universal-apple-darwin/release
-            lipo -create -output target/universal-apple-darwin/release/scribe \
-              target/aarch64-apple-darwin/release/scribe \
-              target/x86_64-apple-darwin/release/scribe
-            lipo -archs target/universal-apple-darwin/release/scribe
+            lipo -create -output target/universal-apple-darwin/release/mukti \
+              target/aarch64-apple-darwin/release/mukti \
+              target/x86_64-apple-darwin/release/mukti
+            lipo -archs target/universal-apple-darwin/release/mukti
           else
-            cargo build --release -p scribe-cli
+            cargo build --release -p mukti-cli
           fi
 
       - name: Build the app installer
         uses: tauri-apps/tauri-action@v0
         with:
-          projectPath: crates/scribe-app
+          projectPath: crates/mukti-app
           args: --target ${{ matrix.target }}
 
       - name: Collect what was built
@@ -108,13 +108,13 @@ jobs:
         run: |
           mkdir -p out
           # The command-line tool, under a name that says which machine it is for.
-          for f in target/universal-apple-darwin/release/scribe \
-                   target/release/scribe target/release/scribe.exe; do
-            [ -f "$f" ] && cp "$f" "out/scribe-${{ matrix.target }}${f##*scribe}"
+          for f in target/universal-apple-darwin/release/mukti \
+                   target/release/mukti target/release/mukti.exe; do
+            [ -f "$f" ] && cp "$f" "out/mukti-${{ matrix.target }}${f##*mukti}"
           done
           # Prove the claim in the file name rather than asserting it.
           if [ "${{ runner.os }}" = "macOS" ]; then
-            lipo -archs out/scribe-universal-apple-darwin | grep -q "x86_64 arm64" \
+            lipo -archs out/mukti-universal-apple-darwin | grep -q "x86_64 arm64" \
               || { echo "the universal binary is not universal"; exit 1; }
           fi
           # Installers, wherever this platform's bundler put them.
@@ -125,7 +125,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: gru953-scribe-${{ matrix.target }}
+          name: gru953-mukti-${{ matrix.target }}
           path: out/*
           if-no-files-found: error
 

@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/scribe-core",
-    "crates/scribe-cli",
-    "crates/scribe-app",
-    "crates/scribe-formats",
+    "crates/mukti-core",
+    "crates/mukti-cli",
+    "crates/mukti-app",
+    "crates/mukti-formats",
     "devtools/lexicon-build",
     "devtools/corpus-label",
     "devtools/eval",
@@ -13,11 +13,11 @@ members = [
 # Shared metadata. Every crate in the workspace inherits these with
 # `field.workspace = true`, so the version and licence are stated once.
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.82"
 license = "MIT"
-repository = "https://github.com/GRU-953/gru953-scribe"
+repository = "https://github.com/GRU-953/gru953-mukti"
 authors = ["GRU953"]
 
 [workspace.lints.clippy]

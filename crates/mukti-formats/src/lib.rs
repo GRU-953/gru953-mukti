@@ -12,9 +12,9 @@ pub mod pdf;
 pub use office::{convert_office, runs, Run, Summary};
 pub use pdf::convert_pdf_to_text;
 
-use gru953_scribe::classify::{classify_words, Verdict};
-use gru953_scribe::dictionary::Dictionary;
-use gru953_scribe::tokenise::{tokenise, Kind};
+use gru953_mukti::classify::{classify_words, Verdict};
+use gru953_mukti::dictionary::Dictionary;
+use gru953_mukti::tokenise::{tokenise, Kind};
 
 /// Convert plain text word by word, counting what changed.
 ///
@@ -39,7 +39,7 @@ pub fn convert_text_with_summary(input: &str) -> (String, Summary) {
             Kind::Gap => out.push_str(segment.text),
             Kind::Word => {
                 if verdicts[w] == Verdict::Legacy {
-                    out.push_str(&gru953_scribe::convert(segment.text));
+                    out.push_str(&gru953_mukti::convert(segment.text));
                     summary.words_converted += 1;
                 } else {
                     out.push_str(segment.text);

@@ -1,4 +1,4 @@
-//! GRU953-Scribe — legacy Bangla encoding to Unicode.
+//! GRU953-Mukti — legacy Bangla encoding to Unicode.
 //!
 //! Deterministic, table-driven, and **not** a machine-learning model. Two
 //! parts: a detector that decides whether a piece of text is legacy-encoded,
@@ -44,7 +44,7 @@ pub mod roundtrip;
 pub mod tables;
 pub mod tokenise;
 
-/// A legacy Bangla encoding GRU953-Scribe can recognise.
+/// A legacy Bangla encoding GRU953-Mukti can recognise.
 ///
 /// "Bijoy" is not one standard. Each variant is named explicitly rather than
 /// hidden behind a vague "custom encodings" claim. The list below was confirmed
@@ -169,7 +169,7 @@ fn apply_map(input: &str, map: &[(&str, &str)]) -> String {
 
 /// The whitespace rules the reference expressed as regular expressions.
 ///
-/// Reimplemented directly so GRU953-Scribe needs no regex dependency.
+/// Reimplemented directly so GRU953-Mukti needs no regex dependency.
 fn normalise_whitespace(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     let mut last_was_space = false;
@@ -950,10 +950,10 @@ pub fn bengali_is_plausible(text: &str) -> bool {
 /// That last rule earned its place immediately. Four entries in the reference
 /// character grid — `দূ্র্য`, `ন্ধূ্র`, `মূ্ন`, `ষ্টূ্র` — are typed this way,
 /// each one the sixth cell of a row whose other seven cells are spelled
-/// correctly. Scribe converts them to the well-formed spelling, and the harness
+/// correctly. Mukti converts them to the well-formed spelling, and the harness
 /// was scoring it wrong for doing so. Stating the rule here means the harness
 /// can excuse them on an independent orthographic test rather than on a claim
-/// that Scribe happens to be right.
+/// that Mukti happens to be right.
 pub fn word_is_well_formed(word: &str) -> bool {
     let chars: Vec<char> = word.chars().collect();
     let mut seen_bengali = false;
@@ -1154,7 +1154,7 @@ mod tests {
 
     /// Mistyped extra vowel signs repaired, so search can find the word.
     ///
-    /// The typos are in the source documents, keyed years ago; Scribe was
+    /// The typos are in the source documents, keyed years ago; Mukti was
     /// reproducing them faithfully, which meant nobody searching for `অনুযায়ী`
     /// would ever find `অনিুযায়ী`.
     ///
@@ -1323,9 +1323,9 @@ mod tests {
         }
 
         // Typing slips found in the reference word list, every one of which
-        // Scribe already converts to the correct spelling. Each is impossible
+        // Mukti already converts to the correct spelling. Each is impossible
         // by orthography, which is what lets the harness set them aside
-        // without having to claim Scribe is right about them.
+        // without having to claim Mukti is right about them.
         for slip in [
             "আহমেদুুল", // the u-kar struck twice
             "অতিারকা",  // two vowel signs on one consonant
@@ -1426,7 +1426,7 @@ mod tests {
     #[test]
     fn ra_phala_is_never_moved() {
         // `্র` attaches to the consonant before it and is already in the right
-        // place. Moving it is the single most damaging thing Scribe could do.
+        // place. Moving it is the single most damaging thing Mukti could do.
         let out = convert("eª¨vÛ");
         assert!(
             !out.starts_with("বর"),

@@ -1,4 +1,4 @@
-//! The Bengali dictionary Scribe carries with it.
+//! The Bengali dictionary Mukti carries with it.
 //!
 //! 451,348 words, compiled from `words.txt` at
 //! `github.com/tahmid02016/bangla-wordlist` (Unlicense, public domain) by
@@ -49,7 +49,7 @@ pub struct Dictionary {
 }
 
 impl Dictionary {
-    /// The dictionary Scribe ships with.
+    /// The dictionary Mukti ships with.
     ///
     /// Built once on first use and shared thereafter. The automaton is read
     /// straight out of the binary, so this allocates nothing.

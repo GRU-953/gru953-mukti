@@ -437,9 +437,9 @@ dependencies = [
 
 [[package]]
 name = "corpus-label"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
- "scribe-formats",
+ "mukti-formats",
 ]
 
 [[package]]
@@ -866,10 +866,10 @@ dependencies = [
 
 [[package]]
 name = "eval"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "fst",
- "gru953-scribe",
+ "gru953-mukti",
 ]
 
 [[package]]
@@ -1278,8 +1278,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "gru953-scribe"
-version = "0.3.0"
+name = "gru953-mukti"
+version = "0.4.0"
 dependencies = [
  "fst",
 ]
@@ -1821,10 +1821,10 @@ dependencies = [
 
 [[package]]
 name = "lexicon-build"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "fst",
- "gru953-scribe",
+ "gru953-mukti",
 ]
 
 [[package]]
@@ -2018,6 +2018,35 @@ dependencies = [
  "serde",
  "thiserror 2.0.20",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "mukti-app"
+version = "0.4.0"
+dependencies = [
+ "gru953-mukti",
+ "serde",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+]
+
+[[package]]
+name = "mukti-cli"
+version = "0.4.0"
+dependencies = [
+ "gru953-mukti",
+ "mukti-formats",
+]
+
+[[package]]
+name = "mukti-formats"
+version = "0.4.0"
+dependencies = [
+ "gru953-mukti",
+ "lopdf",
+ "quick-xml 0.37.5",
+ "zip",
 ]
 
 [[package]]
@@ -2893,35 +2922,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "scribe-app"
-version = "0.3.0"
-dependencies = [
- "gru953-scribe",
- "serde",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
-]
-
-[[package]]
-name = "scribe-cli"
-version = "0.3.0"
-dependencies = [
- "gru953-scribe",
- "scribe-formats",
-]
-
-[[package]]
-name = "scribe-formats"
-version = "0.3.0"
-dependencies = [
- "gru953-scribe",
- "lopdf",
- "quick-xml 0.37.5",
- "zip",
-]
 
 [[package]]
 name = "selectors"

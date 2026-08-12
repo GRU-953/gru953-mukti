@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 — 13 August 2026
+
+**Renamed from GRU953 Scribe to GRU953 Mukti** (মুক্তি, "freedom"). The app, the
+command, the crates and the repository all follow.
+
+This is a breaking change for anyone who installed 0.3.0: the command is now
+`mukti` rather than `scribe`, and the crate names changed with it. Nothing
+about the conversion changed — all 105 tests pass unaltered, and every accuracy
+figure below is the same measurement as 0.3.0.
+
+The brand kit's naming rule was amended rather than quietly broken. It required
+"one plain, lower-risk English word"; it now also allows a plain Bangla word,
+written in Latin script, where a product is made specifically for Bangla
+speakers. The rule exists so a name survives translation — and for an audience
+that reads Bangla, a Bangla word travels further than an English one.
+
 ## 0.3.0 — 12 August 2026
 
 The first version you can actually install and use. 0.2.0 was a Rust library
@@ -10,9 +26,9 @@ accuracy figure that means something.
 
 - **A desktop app** for macOS, Windows and Ubuntu. Two panes, convert as you
   type, drag a file onto the window, light and dark. Its **Show what changed**
-  view marks every word that was converted, so Scribe's judgement is something
+  view marks every word that was converted, so Mukti's judgement is something
   you can check rather than something you have to trust.
-- **A command-line tool**, `scribe convert` and `scribe check`, for doing many
+- **A command-line tool**, `mukti convert` and `mukti check`, for doing many
   files at once. It never overwrites your file unless you type `--in-place`.
 - **Word, Excel and PowerPoint files** converted in place, with formatting,
   tables and pictures untouched. Includes SmartArt, charts, speaker notes and

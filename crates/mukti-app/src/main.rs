@@ -1,4 +1,4 @@
-//! GRU953 Scribe — the desktop app.
+//! GRU953 Mukti — the desktop app.
 //!
 //! A thin shell around the same converter the command-line tool uses. Every
 //! accuracy figure quoted anywhere in this project describes exactly this
@@ -20,17 +20,17 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use gru953_scribe::classify::{classify_words, Verdict};
-use gru953_scribe::convert;
-use gru953_scribe::dictionary::Dictionary;
-use gru953_scribe::encoding::{decode, TextEncoding};
-use gru953_scribe::tokenise::{tokenise, Kind};
+use gru953_mukti::classify::{classify_words, Verdict};
+use gru953_mukti::convert;
+use gru953_mukti::dictionary::Dictionary;
+use gru953_mukti::encoding::{decode, TextEncoding};
+use gru953_mukti::tokenise::{tokenise, Kind};
 use serde::Serialize;
 
 /// One piece of the result, ready to be drawn.
 ///
 /// The `changed` flag is what makes the "what changed" view possible: the
-/// window can show you precisely which words Scribe touched, so its judgement
+/// window can show you precisely which words Mukti touched, so its judgement
 /// is something you can check rather than something you have to trust.
 #[derive(Serialize)]
 struct Piece {

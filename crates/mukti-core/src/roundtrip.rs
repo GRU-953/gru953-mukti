@@ -1,6 +1,6 @@
-//! A round-trip harness for GRU953-Scribe — a measuring instrument, not a fix.
+//! A round-trip harness for GRU953-Mukti — a measuring instrument, not a fix.
 //!
-//! Scribe has never had large-scale test data with a **known correct answer**.
+//! Mukti has never had large-scale test data with a **known correct answer**.
 //! Hand-checking converted output does not scale, and every automated check so
 //! far asks only "is this well-formed Bengali?" — a bar that a wrong-glyph
 //! mapping sailed straight through, producing well-formed Bengali that was the
