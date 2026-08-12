@@ -73,18 +73,21 @@ struct Features {
     converted_plausible: bool,
     /// A common English word, which no amount of context should override.
     is_english: bool,
+    /// How many letters and digits the word has. One is never enough.
+    alphanumeric: usize,
 }
 
-/// English words common enough that seeing one settles the matter.
+/// Modern office vocabulary that a 1934 dictionary cannot contain.
 ///
-/// Deliberately short and dull. These carry no meaning of their own, which is
-/// exactly why they are reliable evidence: English prose is full of them and
-/// Bengali text — however it is encoded — is not.
+/// The bulk of the English guard is [`Dictionary::english`], 234,428 words
+/// from Webster's Second International. Its blind spot is everything coined
+/// since: email, website, dataset, spreadsheet. These documents are written
+/// in precisely that register, so the gap matters and this list closes it.
 ///
-/// Kept as a guard rather than a general English dictionary, because the real
-/// work is done by asking whether the conversion is a Bengali word. English
-/// forced through the Bijoy tables produces noise a dictionary rejects; this
-/// list only has to catch the short words where noise might hit by chance.
+/// Kept as a belt-and-braces addition rather than on measured evidence: the
+/// Webster-only variant was never run on its own, so this list has not been
+/// shown to be load-bearing. If a later pass wants to trim the code, measure
+/// without it first rather than assuming either way.
 const ENGLISH_GUARD: &[&str] = &[
     "the", "and", "for", "are", "but", "not", "you", "all", "any", "can", "had", "her", "was",
     "one", "our", "out", "day", "get", "has", "him", "his", "how", "its", "may", "new", "now",
@@ -139,11 +142,17 @@ impl Features {
             )
         };
 
+        // Two lists, union. The 234,428-word Webster list carries the bulk;
+        // the short guard adds the modern office vocabulary a 1934 dictionary
+        // could not have — email, website, dataset — which is exactly the
+        // register these documents are written in.
         let lower = word.to_ascii_lowercase();
         let bare = lower.trim_matches(|c: char| !c.is_ascii_alphabetic());
-        let is_english = word.is_ascii() && ENGLISH_GUARD.contains(&bare);
+        let is_english = word.is_ascii()
+            && (ENGLISH_GUARD.contains(&bare) || Dictionary::english().contains_english(word));
 
         Features {
+            alphanumeric: word.chars().filter(|c| c.is_alphanumeric()).count(),
             has_unicode_bengali,
             is_inert,
             distinct_exotic: seen.len(),
@@ -195,7 +204,14 @@ fn judge_alone(word: &str, dictionary: &Dictionary) -> Verdict {
     // Pure ASCII that converts to a real word. Genuinely undecidable alone:
     // this is `bvg` (নাম) and it is also three Latin letters. Ask the
     // neighbours.
-    if f.converted_is_word {
+    //
+    // Two characters minimum. A single letter converts to a single Bengali
+    // letter, and single Bengali letters are words — so `I` becomes `ও` and
+    // the English first person singular disappears from the middle of a
+    // sentence. Measured: 24 occurrences in one half of the corpus, the
+    // largest single source of genuine false positives. One character is not
+    // evidence, however good its neighbours look.
+    if f.converted_is_word && f.alphanumeric >= 2 {
         return Verdict::Uncertain;
     }
 

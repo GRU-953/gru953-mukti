@@ -450,19 +450,27 @@ fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>
     let mut doc = usize::MAX;
     let mut words: Vec<String> = Vec::new();
     let mut labels: Vec<&'static str> = Vec::new();
+    // What is actually being got wrong, by frequency. Frequency is the point:
+    // a token that recurs is ordinary vocabulary, not somebody's name or a
+    // one-off reference, so this can be looked at without reading documents.
+    let mut wrong_english: BTreeMap<String, usize> = BTreeMap::new();
 
     let flush = |words: &mut Vec<String>,
                  labels: &mut Vec<&'static str>,
-                 counts: &mut BTreeMap<&'static str, (usize, usize)>| {
+                 counts: &mut BTreeMap<&'static str, (usize, usize)>,
+                 wrong: &mut BTreeMap<String, usize>| {
         if words.is_empty() {
             return;
         }
         let refs: Vec<&str> = words.iter().map(String::as_str).collect();
         let verdicts = classify_words(&refs, dictionary);
-        for (verdict, label) in verdicts.iter().zip(labels.iter()) {
+        for ((verdict, label), word) in verdicts.iter().zip(labels.iter()).zip(refs.iter()) {
             let entry = counts.entry(label).or_default();
             entry.0 += usize::from(*verdict == Verdict::Legacy);
             entry.1 += 1;
+            if *verdict == Verdict::Legacy && *label == "english" {
+                *wrong.entry((*word).to_owned()).or_default() += 1;
+            }
         }
         words.clear();
         labels.clear();
@@ -482,13 +490,13 @@ fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>
             _ => continue,
         };
         if row.doc != doc {
-            flush(&mut words, &mut labels, &mut counts);
+            flush(&mut words, &mut labels, &mut counts, &mut wrong_english);
             doc = row.doc;
         }
         words.push(row.token);
         labels.push(name);
     }
-    flush(&mut words, &mut labels, &mut counts);
+    flush(&mut words, &mut labels, &mut counts, &mut wrong_english);
 
     let get = |k: &str| counts.get(k).copied().unwrap_or((0, 0));
     let (legacy_hit, legacy_n) = get("legacy");
@@ -534,6 +542,17 @@ fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>
     println!("    {}", Proportion::new(amb_hit, amb_n).describe());
     println!("    These are real legacy words that carry no evidence of it. Every one");
     println!("    recovered here was recovered from its neighbours alone.");
+
+    let mut worst: Vec<_> = wrong_english.iter().collect();
+    worst.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    println!("\n  English tokens most often converted in error:");
+    for (token, count) in worst.iter().take(20) {
+        println!(
+            "    {:>6}x  {token}  ->  {}",
+            thousands(**count),
+            convert(token)
+        );
+    }
     Ok(())
 }
 

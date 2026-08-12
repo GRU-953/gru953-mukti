@@ -33,6 +33,16 @@ use crate::roundtrip::normalise_nukta;
 /// The compiled word list, built into the binary.
 static SHIPPED_BYTES: &[u8] = include_bytes!("../data/bengali-words.fst");
 
+/// 234,428 English words, for the opposite job: proving a word is **not**
+/// Bijoy so it is left alone.
+///
+/// Compiled from `/usr/share/dict/words` — Webster's Second International,
+/// whose 1934 copyright has lapsed, so it is public domain. It is built in
+/// rather than read from the system at runtime because Windows has no such
+/// file, and a guard that silently disappears on one platform is worse than
+/// no guard at all.
+static ENGLISH_BYTES: &[u8] = include_bytes!("../data/english-words.fst");
+
 /// A set of Bengali words that can be asked whether it holds one.
 pub struct Dictionary {
     set: fst::Set<&'static [u8]>,
@@ -51,6 +61,28 @@ impl Dictionary {
             // than anything a caller could recover from.
             set: fst::Set::new(SHIPPED_BYTES).expect("the embedded dictionary is not a valid FST"),
         })
+    }
+
+    /// The English word list, used to protect readable English.
+    pub fn english() -> &'static Dictionary {
+        static ENGLISH: OnceLock<Dictionary> = OnceLock::new();
+        ENGLISH.get_or_init(|| Dictionary {
+            set: fst::Set::new(ENGLISH_BYTES)
+                .expect("the embedded English list is not a valid FST"),
+        })
+    }
+
+    /// Is this an ordinary English word?
+    ///
+    /// Case and surrounding punctuation are stripped first, so `Report,` and
+    /// `THE` are recognised as readily as `report`.
+    pub fn contains_english(&self, word: &str) -> bool {
+        if !word.is_ascii() {
+            return false;
+        }
+        let lower = word.to_ascii_lowercase();
+        let bare = lower.trim_matches(|c: char| !c.is_ascii_lowercase());
+        bare.len() >= 2 && self.set.contains(bare)
     }
 
     /// Is this an actual Bengali word?

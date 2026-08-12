@@ -72,6 +72,10 @@ enum Label {
     /// Digits, punctuation and symbols only. Carries no evidence of any
     /// encoding and must pass through untouched.
     Inert,
+    /// The declared font and the actual bytes contradict each other: a
+    /// non-legacy font, but Bijoy-range characters in the text. Excluded from
+    /// every figure, because a label nobody can trust is worse than no label.
+    FontDisputed,
 }
 
 impl Label {
@@ -83,6 +87,7 @@ impl Label {
             Label::Unicode => "unicode",
             Label::English => "english",
             Label::Inert => "inert",
+            Label::FontDisputed => "font_disputed",
         }
     }
 }
@@ -121,6 +126,44 @@ fn classify(token: &str, font: Option<&str>) -> Label {
     }
     if OTHER_LEGACY.iter().any(|f| family.contains(f)) {
         return Label::OtherLegacy;
+    }
+
+    // The font says this is not legacy. The bytes disagree.
+    //
+    // A token carrying Bijoy-range characters — `©`, `~`, `‡`, `¨` — is not
+    // English, whatever the run claims: English does not put a copyright sign
+    // in the middle of a word. When the two sources of evidence contradict
+    // each other, the honest label is neither, so the token is set aside and
+    // counted rather than guessed at.
+    //
+    // This is not hypothetical. Converting the archive's `.doc` files to
+    // `.docx` with LibreOffice dropped the font attribution on many runs, and
+    // without this guard those runs were labelled English — so genuine Bijoy
+    // such as `Kg©m~wP` counted as a false positive when Scribe correctly
+    // turned it into কর্মসূচি. Left in, it would have made a correct
+    // classifier look broken, which is the most expensive kind of wrong
+    // measurement there is.
+    //
+    // Note the deliberate asymmetry: this only ever *removes* a token from the
+    // English class. It never promotes anything into the legacy class, so it
+    // cannot manufacture recall.
+    //
+    // The character has to sit INSIDE the word. English typography uses this
+    // same byte range at the edges of words — curly quotes, an em-dash, a
+    // trailing copyright sign — and none of that is evidence of anything. It
+    // is `©` in the *middle* of `Kg©m~wP` that English never does.
+    //
+    // Two earlier versions of this guard were caught by unit tests: the first
+    // swallowed a bare `—`, the second swallowed `“quoted”`. Both are here.
+    //
+    // Known limitation, and deliberately left: a Bijoy word whose only
+    // out-of-range character is at its edge — `(`vwe)`, দাবি — is trimmed back
+    // to plain ASCII and stays in the English class. That inflates the
+    // measured false-positive rate rather than deflating it, so the error runs
+    // in the safe direction: it understates the classifier.
+    let core = token.trim_matches(|c: char| !c.is_ascii_alphanumeric());
+    if has_bijoy_range(core) {
+        return Label::FontDisputed;
     }
 
     if token.chars().any(|c| c.is_ascii_alphabetic()) {
@@ -263,6 +306,7 @@ fn report(
         Label::Unicode,
         Label::English,
         Label::Inert,
+        Label::FontDisputed,
     ];
     println!("\n{files} files, {with_legacy} carrying legacy text, {unreadable} unreadable.\n");
     println!(
@@ -350,6 +394,27 @@ mod tests {
         assert_eq!(classify("2026", Some("Calibri")), Label::Inert);
         assert_eq!(classify("—", None), Label::Inert);
         assert_eq!(classify("(12.5%)", None), Label::Inert);
+    }
+
+    /// The font says English; the bytes say Bijoy. Neither label is trustworthy.
+    #[test]
+    fn a_run_whose_font_and_bytes_disagree_is_set_aside() {
+        // Real case: converting .doc to .docx dropped the font attribution, so
+        // genuine Bijoy arrived claiming to be Calibri.
+        for bijoy in ["Kg\u{a9}m~wP", "Ki\u{2021}Z", "\u{af}\u{2019}vbvš\u{cd}i"] {
+            assert_eq!(
+                classify(bijoy, Some("Calibri")),
+                Label::FontDisputed,
+                "Bijoy bytes were labelled English: {bijoy}"
+            );
+        }
+        // But ordinary English punctuation shares that byte range and must not
+        // be dragged in with it.
+        // English typography lives in the same byte range at the EDGES of
+        // words, and must not be dragged in with it.
+        assert_eq!(classify("\u{2014}", None), Label::Inert);
+        assert_eq!(classify("\u{201c}quoted\u{201d}", None), Label::English);
+        assert_eq!(classify("Ltd.\u{a9}", None), Label::English);
     }
 
     #[test]

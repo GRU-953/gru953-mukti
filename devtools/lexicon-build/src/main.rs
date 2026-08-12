@@ -57,6 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sources: &[&str] = match args.mode {
         Mode::Shipped => &[SHIPPED_SOURCE],
         Mode::Extended => EXTENDED_SOURCES,
+        Mode::English => &["words"],
     };
 
     let mut words = BTreeSet::new();
@@ -71,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut lines = 0usize;
         for line in text.lines() {
             lines += 1;
-            match clean(line) {
+            match clean(line, &args.mode) {
                 Some(word) => {
                     words.insert(word);
                 }
@@ -128,7 +129,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// looked it up the other way. Settling on the precomposed form here means
 /// every lookup asks the same question. This distinction has already cost this
 /// codebase four separate defects.
-fn clean(line: &str) -> Option<String> {
+fn clean(line: &str, mode: &Mode) -> Option<String> {
+    if matches!(mode, Mode::English) {
+        return clean_english(line);
+    }
     let word = normalise_nukta(line.trim().trim_start_matches('\u{FEFF}'))
         // Two-part vowels, for exactly the same reason as the nukta. `ো` is one
         // character (U+09CB) and also, equally legally, `ে` followed by `া`
@@ -149,9 +153,31 @@ fn clean(line: &str) -> Option<String> {
     }
 }
 
+/// One English entry, lower-cased.
+///
+/// Only plain lower-case alphabetic words are kept. Webster's list carries
+/// capitalised proper nouns and single letters; a single letter would match
+/// far too much, and proper nouns are handled by the same lower-cased form
+/// when they appear in ordinary text. Two letters minimum, for the same
+/// reason the Bengali stems have a floor: shorter matches by chance.
+fn clean_english(line: &str) -> Option<String> {
+    let word = line.trim().to_ascii_lowercase();
+    if word.len() < 2 || !word.chars().all(|c| c.is_ascii_lowercase()) {
+        return None;
+    }
+    Some(word)
+}
+
 enum Mode {
     Shipped,
     Extended,
+    /// The English word list, used to protect readable English from being
+    /// converted. Built from `/usr/share/dict/words` — Webster's Second
+    /// International, whose 1934 copyright has lapsed, so it is public domain
+    /// and may be redistributed. Present on macOS and most Linux systems and
+    /// absent on Windows, which is exactly why it is compiled in rather than
+    /// read at runtime.
+    English,
 }
 
 struct Args {
@@ -173,6 +199,7 @@ impl Args {
                     mode = match it.next().as_deref() {
                         Some("shipped") => Mode::Shipped,
                         Some("extended") => Mode::Extended,
+                        Some("english") => Mode::English,
                         other => return Err(format!("unknown mode {other:?}")),
                     }
                 }
@@ -183,6 +210,7 @@ impl Args {
         let out = out.unwrap_or_else(|| match mode {
             Mode::Shipped => default_shipped_out(),
             Mode::Extended => PathBuf::from("local/extended-words.fst"),
+            Mode::English => PathBuf::from("crates/scribe-core/data/english-words.fst"),
         });
         Ok(Args { corpus, out, mode })
     }
@@ -206,14 +234,17 @@ mod tests {
 
     #[test]
     fn only_wholly_bengali_entries_survive() {
-        assert_eq!(clean("  শাখা \n").as_deref(), Some("শাখা"));
+        assert_eq!(clean("  শাখা \n", &Mode::Shipped).as_deref(), Some("শাখা"));
         // A byte-order mark on the first line of a list is ordinary and must
         // not become part of the first word.
-        assert_eq!(clean("\u{FEFF}অংশ").as_deref(), Some("অংশ"));
+        assert_eq!(clean("\u{FEFF}অংশ", &Mode::Shipped).as_deref(), Some("অংশ"));
 
         for rejected in ["", "   ", "অ-কার", "ঢাকা2026", "Dhaka", "প্রতিবেদন।"]
         {
-            assert!(clean(rejected).is_none(), "accepted {rejected:?}");
+            assert!(
+                clean(rejected, &Mode::Shipped).is_none(),
+                "accepted {rejected:?}"
+            );
         }
     }
 
@@ -224,8 +255,11 @@ mod tests {
         let composed = "গুল\u{09CB}";
         let decomposed = "গুল\u{09C7}\u{09BE}";
         assert_ne!(composed, decomposed, "the two spellings differ as bytes");
-        assert_eq!(clean(composed), clean(decomposed));
-        assert_eq!(clean(decomposed).as_deref(), Some(composed));
+        assert_eq!(
+            clean(composed, &Mode::Shipped),
+            clean(decomposed, &Mode::Shipped)
+        );
+        assert_eq!(clean(decomposed, &Mode::Shipped).as_deref(), Some(composed));
     }
 
     #[test]
@@ -233,9 +267,12 @@ mod tests {
         let precomposed = "সম\u{09DF}";
         let decomposed = "সম\u{09AF}\u{09BC}";
         assert_ne!(precomposed, decomposed, "the two spellings differ as bytes");
-        assert_eq!(clean(precomposed), clean(decomposed));
+        assert_eq!(
+            clean(precomposed, &Mode::Shipped),
+            clean(decomposed, &Mode::Shipped)
+        );
         assert!(
-            clean(decomposed).is_some(),
+            clean(decomposed, &Mode::Shipped).is_some(),
             "the decomposed form was dropped"
         );
     }
