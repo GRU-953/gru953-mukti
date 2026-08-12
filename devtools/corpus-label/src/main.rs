@@ -168,18 +168,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     files.sort();
     println!("{} Office files found.", files.len());
 
+    // Refuse to touch the output when there is nothing to write into it.
+    //
+    // This is not defensive tidiness; it is a defect being closed. The output
+    // file used to be created before the inputs were examined, so pointing
+    // this tool at a directory that had been moved truncated a 152 MB
+    // labelled set to a bare header — silently, and with an exit code of 0.
+    // Destroying the previous answer key is the worst thing this tool can do,
+    // so it now cannot do it by accident.
+    if files.is_empty() {
+        return Err(format!(
+            "no .docx, .xlsx or .pptx files under {}.\n\
+             Refusing to write {}, which would destroy whatever is already there.\n\
+             Check the paths: they may have been moved or renamed.",
+            roots
+                .iter()
+                .map(|r| r.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", "),
+            out.display()
+        )
+        .into());
+    }
+
     if let Some(parent) = out.parent() {
         fs::create_dir_all(parent)?;
     }
     let mut writer = BufWriter::new(fs::File::create(&out)?);
-    writeln!(writer, "split\tlabel\ttoken")?;
+    // A document index, not a path: the context pass needs to know which
+    // words sit together, and a bare integer says that without carrying a
+    // private file name out of the archive.
+    writeln!(writer, "split\tdoc\tlabel\ttoken")?;
 
     // Counts only. Never a token, never a file name — this goes to the terminal.
     let mut counts: BTreeMap<(&str, Label), usize> = BTreeMap::new();
     let mut documents_with_legacy = 0usize;
     let mut unreadable = 0usize;
 
-    for path in &files {
+    for (doc, path) in files.iter().enumerate() {
         let file = match fs::File::open(path) {
             Ok(f) => f,
             Err(_) => {
@@ -204,7 +230,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     legacy_here += 1;
                 }
                 *counts.entry((split, label)).or_default() += 1;
-                writeln!(writer, "{split}\t{}\t{token}", label.as_str())?;
+                writeln!(writer, "{split}\t{doc}\t{}\t{token}", label.as_str())?;
             }
         }
         if legacy_here > 0 {

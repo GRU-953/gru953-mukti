@@ -36,10 +36,12 @@
 //! "no character", which is the intended meaning. Output therefore differs from
 //! the reference only where the reference was wrong.
 
+pub mod classify;
 pub mod dictionary;
 pub mod lexicon;
 pub mod roundtrip;
 pub mod tables;
+pub mod tokenise;
 
 /// A legacy Bangla encoding GRU953-Scribe can recognise.
 ///

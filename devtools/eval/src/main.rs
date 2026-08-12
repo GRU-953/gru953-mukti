@@ -26,6 +26,7 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
+use gru953_scribe::classify::{classify_words, Verdict};
 use gru953_scribe::dictionary::Dictionary;
 use gru953_scribe::roundtrip::{is_testable_word, normalise_nukta, to_bijoy};
 use gru953_scribe::{convert, detect, word_is_well_formed, LegacyEncoding};
@@ -42,6 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     m3_dictionary_on_real_documents(&cfg)?;
     m4_vowel_preservation(&cfg)?;
     detection(&cfg)?;
+    detection_with_context(&cfg)?;
 
     println!("\nEvery figure above is measured, not estimated. Sample sizes are");
     println!("stated because a percentage without one means nothing.");
@@ -252,7 +254,7 @@ fn m3_dictionary_on_real_documents(cfg: &Config) -> Result<(), Box<dyn std::erro
     let mut found_shipped = 0usize;
 
     for row in rows(&cfg.labels)? {
-        let (_, label, token) = row?;
+        let Row { label, token, .. } = row?;
         if label != "legacy" {
             continue;
         }
@@ -354,7 +356,12 @@ fn detection(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
 
     let mut counts: BTreeMap<&'static str, (usize, usize)> = BTreeMap::new();
     for row in rows(&cfg.labels)? {
-        let (split, label, token) = row?;
+        let Row {
+            split,
+            label,
+            token,
+            ..
+        } = row?;
         if split != "test" {
             continue;
         }
@@ -413,6 +420,124 @@ fn detection(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // ---------------------------------------------------------------------------
+// Detection, word level, with context — the Phase 3 classifier
+// ---------------------------------------------------------------------------
+
+/// The same question as `detection`, put to the word-level classifier.
+///
+/// Two differences from the baseline, and both matter:
+///
+/// * words are judged **in document order**, so the context pass has the
+///   neighbours it was built to use;
+/// * the split is chosen by the caller. Thresholds are tuned against `tune`
+///   and the figure that gets quoted comes from `test`, which is never looked
+///   at while anything is being adjusted. Tuning on the data you report on is
+///   how a classifier scores 99% on paper and fails on the first real file.
+fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
+    heading(
+        "D2",
+        &format!(
+            "Word-level detection with context, on the {} split",
+            cfg.split
+        ),
+    );
+
+    let dictionary = Dictionary::shipped();
+    let mut counts: BTreeMap<&'static str, (usize, usize)> = BTreeMap::new();
+
+    // One document at a time, in order. Anything else would deny the context
+    // pass the only thing it has to work with.
+    let mut doc = usize::MAX;
+    let mut words: Vec<String> = Vec::new();
+    let mut labels: Vec<&'static str> = Vec::new();
+
+    let flush = |words: &mut Vec<String>,
+                 labels: &mut Vec<&'static str>,
+                 counts: &mut BTreeMap<&'static str, (usize, usize)>| {
+        if words.is_empty() {
+            return;
+        }
+        let refs: Vec<&str> = words.iter().map(String::as_str).collect();
+        let verdicts = classify_words(&refs, dictionary);
+        for (verdict, label) in verdicts.iter().zip(labels.iter()) {
+            let entry = counts.entry(label).or_default();
+            entry.0 += usize::from(*verdict == Verdict::Legacy);
+            entry.1 += 1;
+        }
+        words.clear();
+        labels.clear();
+    };
+
+    for row in rows(&cfg.labels)? {
+        let row = row?;
+        if row.split != cfg.split {
+            continue;
+        }
+        let name: &'static str = match row.label.as_str() {
+            "legacy" => "legacy",
+            "legacy_ascii" => "legacy_ascii",
+            "unicode" => "unicode",
+            "english" => "english",
+            "inert" => "inert",
+            _ => continue,
+        };
+        if row.doc != doc {
+            flush(&mut words, &mut labels, &mut counts);
+            doc = row.doc;
+        }
+        words.push(row.token);
+        labels.push(name);
+    }
+    flush(&mut words, &mut labels, &mut counts);
+
+    let get = |k: &str| counts.get(k).copied().unwrap_or((0, 0));
+    let (legacy_hit, legacy_n) = get("legacy");
+    let recall = Proportion::new(legacy_hit, legacy_n);
+
+    let must_not: usize = ["unicode", "english", "inert"]
+        .iter()
+        .map(|k| get(k).1)
+        .sum();
+    let wrongly: usize = ["unicode", "english", "inert"]
+        .iter()
+        .map(|k| get(k).0)
+        .sum();
+    let fpr = Proportion::new(wrongly, must_not);
+    let english = Proportion::new(get("english").0, get("english").1);
+
+    let precision = Proportion::new(legacy_hit, legacy_hit + wrongly);
+    let f1 = if precision.rate() + recall.rate() > 0.0 {
+        2.0 * precision.rate() * recall.rate() / (precision.rate() + recall.rate())
+    } else {
+        0.0
+    };
+
+    println!("  Recall on legacy words     {}", recall.describe());
+    println!("  Precision                  {}", precision.describe());
+    println!("  F1                         {f1:.4}");
+    println!("  False positives, aggregate {}", fpr.describe());
+    gate("recall", recall.rate(), 0.99);
+    gate_max("false positives, aggregate", fpr.rate(), 0.001);
+
+    println!("\n  Wrongly converted, by what the text actually was:");
+    for key in ["unicode", "english", "inert"] {
+        let (hit, n) = get(key);
+        println!("    {key:<14} {}", Proportion::new(hit, n).describe());
+    }
+    // The gate that actually binds. The aggregate is diluted by the enormous,
+    // perfectly clean Unicode class; English is where readable text gets
+    // destroyed, so English is what has to clear the bar.
+    gate_max("false positives on ENGLISH", english.rate(), 0.001);
+
+    let (amb_hit, amb_n) = get("legacy_ascii");
+    println!("\n  Pure-ASCII legacy — genuinely ambiguous, reported on its own:");
+    println!("    {}", Proportion::new(amb_hit, amb_n).describe());
+    println!("    These are real legacy words that carry no evidence of it. Every one");
+    println!("    recovered here was recovered from its neighbours alone.");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Plumbing
 // ---------------------------------------------------------------------------
 
@@ -420,6 +545,9 @@ struct Config {
     corpus: PathBuf,
     labels: PathBuf,
     extended_fst: PathBuf,
+    /// Which half of the labelled set D2 reports on. `tune` while adjusting
+    /// anything; `test` only when the figure is going to be quoted.
+    split: String,
 }
 
 impl Config {
@@ -427,12 +555,14 @@ impl Config {
         let mut corpus = None;
         let mut labels = PathBuf::from("local/labelled-tokens.tsv");
         let mut extended_fst = PathBuf::from("local/extended-words.fst");
+        let mut split = String::from("test");
         let mut it = std::env::args().skip(1);
         while let Some(arg) = it.next() {
             match arg.as_str() {
                 "--corpus" => corpus = it.next().map(PathBuf::from),
                 "--labels" => labels = it.next().map(PathBuf::from).unwrap_or(labels),
                 "--words" => extended_fst = it.next().map(PathBuf::from).unwrap_or(extended_fst),
+                "--split" => split = it.next().unwrap_or(split),
                 "--report" => {}
                 other => return Err(format!("unknown argument {other:?}")),
             }
@@ -441,25 +571,37 @@ impl Config {
             corpus: corpus.ok_or("--corpus <Bangla Word Collection dir> is required")?,
             labels,
             extended_fst,
+            split,
         })
     }
 }
 
 /// Stream the labelled set. 152 MB on disk, so never all at once.
-fn rows(
-    path: &Path,
-) -> Result<impl Iterator<Item = std::io::Result<(String, String, String)>>, std::io::Error> {
+fn rows(path: &Path) -> Result<impl Iterator<Item = std::io::Result<Row>>, std::io::Error> {
     let file = BufReader::new(fs::File::open(path)?);
     Ok(file.lines().skip(1).filter_map(|line| match line {
         Err(e) => Some(Err(e)),
         Ok(line) => {
-            let mut parts = line.splitn(3, '\t');
-            match (parts.next(), parts.next(), parts.next()) {
-                (Some(s), Some(l), Some(t)) => Some(Ok((s.to_owned(), l.to_owned(), t.to_owned()))),
+            let mut parts = line.splitn(4, '\t');
+            match (parts.next(), parts.next(), parts.next(), parts.next()) {
+                (Some(s), Some(d), Some(l), Some(t)) => Some(Ok(Row {
+                    split: s.to_owned(),
+                    doc: d.parse().unwrap_or(0),
+                    label: l.to_owned(),
+                    token: t.to_owned(),
+                })),
                 _ => None,
             }
         }
     }))
+}
+
+/// One labelled token, with the document it came from.
+struct Row {
+    split: String,
+    doc: usize,
+    label: String,
+    token: String,
 }
 
 /// A combining mark that cannot begin a word: a vowel sign or a hasant.
