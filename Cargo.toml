@@ -1,16 +1,25 @@
-[package]
-name = "gru953-scribe"
-version = "0.1.0"
+[workspace]
+resolver = "2"
+members = ["crates/scribe-core"]
+
+# Shared metadata. Every crate in the workspace inherits these with
+# `field.workspace = true`, so the version and licence are stated once.
+[workspace.package]
+version = "0.2.0"
 edition = "2021"
-rust-version = "1.70"
-description = "Deterministic Bijoy/SutonnyMJ legacy Bangla to Unicode converter, with a reverse encoder for round-trip testing."
-readme = "README.md"
-license-file = "LICENSE"
-keywords = ["bengali", "bangla", "bijoy", "sutonnymj", "unicode"]
-categories = ["text-processing", "internationalization"]
+rust-version = "1.82"
+license = "MIT"
+repository = "https://github.com/GRU-953/gru953-scribe"
+authors = ["GRU953"]
 
-[dependencies]
-# None. This crate is deliberately dependency-free.
-
-[lints.clippy]
+[workspace.lints.clippy]
 all = "warn"
+
+[profile.release]
+# The dictionary and the conversion tables are the bulk of the binary; a
+# smaller binary matters more here than the last few percent of speed, and
+# conversion is already far faster than any file we can read from disk.
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true

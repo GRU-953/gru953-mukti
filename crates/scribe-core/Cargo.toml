@@ -1,0 +1,19 @@
+[package]
+name = "gru953-scribe"
+description = "Deterministic Bijoy/SutonnyMJ legacy Bangla to Unicode converter, with a reverse encoder used for accuracy measurement."
+readme = "../../README.md"
+keywords = ["bengali", "bangla", "bijoy", "sutonnymj", "unicode"]
+categories = ["text-processing", "internationalization"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+# None yet. A compressed dictionary lands here in Phase 1; until then this
+# crate stays dependency-free.
+
+[lints]
+workspace = true

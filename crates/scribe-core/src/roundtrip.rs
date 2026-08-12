@@ -76,7 +76,9 @@ fn reverse_table() -> &'static HashMap<char, Vec<(&'static str, &'static str)>> 
                 continue;
             }
             claimed.push(unicode);
-            let Some(first) = unicode.chars().next() else { continue };
+            let Some(first) = unicode.chars().next() else {
+                continue;
+            };
             buckets.entry(first).or_default().push((unicode, bijoy));
         }
         // Longest first, so a conjunct is never eaten by its own prefix. The
@@ -145,7 +147,11 @@ fn to_visual_order(unicode: &str) -> Vec<char> {
         while end + 1 < n && s[end] == HALANT && is_consonant(s[end + 1]) {
             end += 2;
         }
-        let kar = if end < n && is_kar(s[end]) { Some(s[end]) } else { None };
+        let kar = if end < n && is_kar(s[end]) {
+            Some(s[end])
+        } else {
+            None
+        };
         let (pre, post) = kar.map_or((None, None), split_kar);
 
         out.extend(pre);
@@ -187,7 +193,8 @@ pub fn to_bijoy(unicode: &str) -> String {
         if let Some(candidates) = table.get(&visual[i]) {
             for (unicode_form, glyph) in candidates {
                 let len = unicode_form.chars().count();
-                if len <= visual.len() - i && visual[i..i + len].iter().copied().eq(unicode_form.chars())
+                if len <= visual.len() - i
+                    && visual[i..i + len].iter().copied().eq(unicode_form.chars())
                 {
                     out.push_str(glyph);
                     taken = len;
@@ -314,11 +321,7 @@ impl Mismatch {
     pub fn pattern(&self) -> String {
         let a: Vec<char> = normalise_nukta(&self.original).chars().collect();
         let b: Vec<char> = normalise_nukta(&self.got).chars().collect();
-        let head = a
-            .iter()
-            .zip(&b)
-            .take_while(|(x, y)| x == y)
-            .count();
+        let head = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
         let tail = a[head..]
             .iter()
             .rev()
@@ -422,9 +425,15 @@ mod tests {
     fn both_spellings_of_ya_with_nukta_compare_equal() {
         let precomposed = "বাস্তবা\u{9df}ন";
         let decomposed = "বাস্তবায\u{9bc}ন";
-        assert_ne!(precomposed, decomposed, "the two spellings must differ as text");
+        assert_ne!(
+            precomposed, decomposed,
+            "the two spellings must differ as text"
+        );
         assert_eq!(normalise_nukta(precomposed), normalise_nukta(decomposed));
-        assert!(round_trip_report(decomposed).is_empty(), "nukta noise leaked through");
+        assert!(
+            round_trip_report(decomposed).is_empty(),
+            "nukta noise leaked through"
+        );
     }
 
     #[test]
@@ -449,11 +458,21 @@ mod tests {
     fn the_filter_agrees_with_the_converter() {
         for c in bijoy_significant() {
             let one = c.to_string();
-            assert_ne!(convert(&one), one, "{c:?} is excluded but converts to itself");
+            assert_ne!(
+                convert(&one),
+                one,
+                "{c:?} is excluded but converts to itself"
+            );
         }
-        for c in [',', '.', '(', ')', '-', '%', ':', ';', '?', '!', '/', '\u{0964}'] {
+        for c in [
+            ',', '.', '(', ')', '-', '%', ':', ';', '?', '!', '/', '\u{0964}',
+        ] {
             let one = c.to_string();
-            assert_eq!(convert(&one), one, "{c:?} is kept but the converter rewrites it");
+            assert_eq!(
+                convert(&one),
+                one,
+                "{c:?} is kept but the converter rewrites it"
+            );
         }
     }
 

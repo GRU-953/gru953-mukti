@@ -29,6 +29,12 @@
 //! at least two characters, so single letters cannot match by chance.
 
 /// Common Bengali stems. Order is irrelevant; this is a membership test.
+///
+/// Formatting is deliberate and exempt from rustfmt: the entries are grouped by
+/// what they are — function words, everyday vocabulary, hand-checked
+/// conversions, loanwords, sector vocabulary — and reflowing them to fill the
+/// line width would scatter each group and lose the comments' meaning.
+#[rustfmt::skip]
 pub static STEMS: &[&str] = &[
     // --- function words: the backbone of any Bengali sentence ---
     "এবং", "এই", "সেই", "যে", "যা", "যদি", "তবে", "কিন্তু", "অথবা",
@@ -165,7 +171,10 @@ mod tests {
             "অফিসের নামঃ তারিখঃ বিভাগঃ",
             "প্রস্তুতকারীর স্বাক্ষরঃ",
         ] {
-            assert!(reads_as_bengali(text), "Bengali heading not recognised: {text}");
+            assert!(
+                reads_as_bengali(text),
+                "Bengali heading not recognised: {text}"
+            );
         }
     }
 
@@ -188,9 +197,12 @@ mod tests {
     #[test]
     fn a_stem_matches_whichever_way_its_nukta_is_written() {
         // `সময়` ("time"), spelled both legal ways. Both must match.
-        let precomposed = "সম\u{09DF}";            // য় as the single U+09DF
-        let decomposed = "সম\u{09AF}\u{09BC}";     // য followed by a combining nukta
-        assert_ne!(precomposed, decomposed, "the two spellings must differ as bytes");
+        let precomposed = "সম\u{09DF}"; // য় as the single U+09DF
+        let decomposed = "সম\u{09AF}\u{09BC}"; // য followed by a combining nukta
+        assert_ne!(
+            precomposed, decomposed,
+            "the two spellings must differ as bytes"
+        );
         assert_eq!(word_hits(precomposed), word_hits(decomposed));
         assert!(word_hits(precomposed) >= 1, "the stem did not match at all");
     }

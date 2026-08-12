@@ -2,11 +2,11 @@
 
 Convert legacy **Bijoy / SutonnyMJ** Bangla text into proper **Unicode** Bengali.
 
-Zero dependencies. Pure Rust. Deterministic.
+Pure Rust. Deterministic. Offline.
 
 ```toml
 [dependencies]
-gru953-scribe = "0.1"
+gru953-scribe = "0.2"
 ```
 
 ```rust
@@ -96,7 +96,7 @@ practice. Other Bijoy-family fonts differ in places, and text produced by them
 may convert imperfectly or not at all.
 
 Where a document's real glyphs were found to be missing from the upstream
-reference table, the additions are kept in `CORRECTIONS` in `src/lib.rs` rather
+reference table, the additions are kept in `CORRECTIONS` in `crates/scribe-core/src/lib.rs` rather
 than merged into the generated tables, so what is ported and what is added
 locally stay visible.
 
@@ -129,15 +129,30 @@ carries no licence at all, so copying from it would have been a licence breach.
 ## Building
 
 ```sh
-cargo test
+cargo test --workspace
 ```
 
-No dependencies, no build script, no network. Bengali text in the tests is
-either ordinary dictionary vocabulary or constructed examples.
+No build script and no network. Bengali text in the tests is either ordinary
+dictionary vocabulary or constructed examples.
+
+## Where this is going
+
+This crate is being built out into **GRU953 Scribe**, an installable desktop
+application for macOS, Windows and Ubuntu, with a command-line tool alongside
+it. Work in progress, in this order:
+
+1. A measurement harness first — accuracy is reported before it is improved.
+2. Word-by-word detection, so only genuinely legacy words are ever rewritten.
+3. A ~466,000-word Bengali dictionary built into the binary, replacing the
+   150 hand-written stems that currently decide what counts as real Bengali.
+4. The desktop app and command-line tool.
+
+The accuracy figures above are the **pre-work baseline** and will be replaced
+by measured ones, with their method and sample size stated alongside.
 
 ## Licence
 
-[PolyForm Noncommercial License 1.0.0](./LICENSE) — free for noncommercial use.
-For a commercial licence, contact the copyright holder.
+[MIT](./LICENSE). Relicensed from PolyForm Noncommercial 1.0.0 in August 2026,
+so the tool is free for anyone to use, including commercially.
 
 Third-party obligations: see [`THIRD-PARTY-LICENSES`](./THIRD-PARTY-LICENSES).

@@ -1,4 +1,9 @@
 /target
 **/*.rs.bk
-Cargo.lock
 .DS_Store
+
+# Anything derived from the private document archive lives here and never
+# leaves this machine: the labelled token dataset, extracted document text,
+# and any intermediate file that could carry a phrase from a real document.
+# Only aggregate statistics may be committed, and never from this directory.
+/local/

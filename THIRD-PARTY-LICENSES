@@ -1,14 +1,25 @@
-Third-party licences for gru953-scribe
+Third-party licences for GRU953 Scribe
 ======================================
 
-This crate contains code ported from the project below. Its licence is
-reproduced in full and must be distributed with any copy of this crate.
+GRU953 Scribe is itself MIT licensed (see LICENSE). It also contains code
+ported from, and assets produced by, the projects below. Their licences are
+reproduced in full and must be distributed with any copy of this software.
+
+Contents
+--------
+  1. almehady/Bijoy-to-Unicode-File-Converter — MIT — conversion tables
+  2. Note on a second implementation that was deliberately NOT used
+
+Further entries are added here as dependencies and bundled fonts land:
+the `fst` crate (Unlicense/MIT) in Phase 1, and Noto Sans / Noto Sans Bengali
+(SIL Open Font License 1.1) when the desktop app bundles them in Phase 4.
 
 
-almehady/Bijoy-to-Unicode-File-Converter
-----------------------------------------
-The character mapping tables in `src/tables.rs` and the reordering rules in
-`src/lib.rs` are ported from this project.
+1. almehady/Bijoy-to-Unicode-File-Converter
+-------------------------------------------
+The character mapping tables in `crates/scribe-core/src/tables.rs` and the
+reordering rules in `crates/scribe-core/src/lib.rs` are ported from this
+project.
 
 Source: https://github.com/almehady/Bijoy-to-Unicode-File-Converter
 Licence: MIT
@@ -35,8 +46,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-Note on a second implementation
--------------------------------
+2. Note on a second implementation
+----------------------------------
 A second, widely-cited Bijoy-to-Unicode implementation was examined and
 deliberately NOT used: it carries no licence at all, so copying from it would
 have been a licence breach. Nothing in this crate derives from it.

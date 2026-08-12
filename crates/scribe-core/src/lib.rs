@@ -102,6 +102,9 @@ const fn is_kar(c: char) -> bool {
 ///
 /// The decomposed form still works: its base letter (`ড`, `ঢ`, `য`) is already
 /// in the list above, and the nukta is handled separately in [`rearrange`].
+/// Laid out as the alphabet's own rows and exempt from rustfmt: one letter per
+/// line is 40 lines that nobody can check against a Bengali chart.
+#[rustfmt::skip]
 const fn is_consonant(c: char) -> bool {
     matches!(c,
         'ক' | 'খ' | 'গ' | 'ঘ' | 'ঙ' | 'চ' | 'ছ' | 'জ' | 'ঝ' | 'ঞ'
@@ -175,7 +178,7 @@ fn move_reph(s: &mut Vec<char>, i: usize) -> bool {
             return false;
         }
         let c = at(s, i - j);
-        if is_consonant(c) && j + 1 <= i && is_halant(at(s, i - j - 1)) {
+        if is_consonant(c) && j < i && is_halant(at(s, i - j - 1)) {
             j += 2;
         } else if j == 1 && is_kar(c) {
             j += 1;
@@ -347,7 +350,10 @@ pub fn detect(input: &str) -> Detection {
         let o = c as u32;
         if (0x0980..=0x09FF).contains(&o) {
             bengali += 1;
-        } else if c.is_ascii_graphic() || (0x00A0..=0x024F).contains(&o) || (0x2010..=0x20FF).contains(&o) {
+        } else if c.is_ascii_graphic()
+            || (0x00A0..=0x024F).contains(&o)
+            || (0x2010..=0x20FF).contains(&o)
+        {
             legacy_range += 1;
         }
     }
@@ -589,10 +595,7 @@ fn repair_mistyped_vowels(s: &str) -> String {
 
 fn repair_word(word: &str) -> String {
     let chars: Vec<char> = word.chars().collect();
-    let Some(at) = chars
-        .windows(2)
-        .position(|w| is_kar(w[0]) && is_kar(w[1]))
-    else {
+    let Some(at) = chars.windows(2).position(|w| is_kar(w[0]) && is_kar(w[1])) else {
         return word.to_owned();
     };
 
@@ -770,8 +773,7 @@ pub fn convert_document(input: &str) -> DocumentConversion {
                 // `E1: "Q1-Q18"` in the same workbook became `ঊ১: "ছ১-ছ১৮"` —
                 // a question reference turned into nonsense. Only the
                 // first produces words a Bengali reader would recognise.
-                && (line.chars().any(|c| !c.is_ascii())
-                    || lexicon::reads_as_bengali(&convert(line))) =>
+                && (!line.is_ascii() || lexicon::reads_as_bengali(&convert(line))) =>
             {
                 converted += 1;
                 convert(line)
@@ -826,15 +828,14 @@ fn split_keeping_separators(input: &str) -> Vec<&str> {
 /// exactly why they are reliable: English prose is full of them and Bengali
 /// text — however it is encoded — is not.
 const ENGLISH_MARKERS: &[&str] = &[
-    "the", "and", "of", "to", "in", "for", "is", "was", "are", "with", "that",
-    "this", "from", "by", "on", "at", "as", "be", "or", "an", "it", "has",
-    "have", "will", "not", "all", "any", "may", "shall", "our", "their",
-    "still", "more", "most", "other", "such", "when", "which", "than", "then",
-    "been", "were", "also", "into", "over", "under", "after", "before", "each",
-    "both", "only", "same", "some", "they", "them", "there", "here", "what",
-    "who", "how", "why", "can", "must", "should", "would", "could", "about",
-    "between", "during", "within", "per", "via", "these", "those", "but", "if",
-    "its", "his", "her", "we", "you", "was", "does", "did", "done", "made",
+    "the", "and", "of", "to", "in", "for", "is", "was", "are", "with", "that", "this", "from",
+    "by", "on", "at", "as", "be", "or", "an", "it", "has", "have", "will", "not", "all", "any",
+    "may", "shall", "our", "their", "still", "more", "most", "other", "such", "when", "which",
+    "than", "then", "been", "were", "also", "into", "over", "under", "after", "before", "each",
+    "both", "only", "same", "some", "they", "them", "there", "here", "what", "who", "how", "why",
+    "can", "must", "should", "would", "could", "about", "between", "during", "within", "per",
+    "via", "these", "those", "but", "if", "its", "his", "her", "we", "you", "was", "does", "did",
+    "done", "made",
 ];
 
 /// Does this line read as English?
@@ -988,13 +989,21 @@ mod tests {
     #[test]
     fn variant_glyph_forms_convert_to_the_right_words() {
         for (legacy, expected, note) in [
-            ("D\u{2021}j\u{f8}L\u{a8}", "উল্লেখ্য", "la-phala variant after ল"),
+            (
+                "D\u{2021}j\u{f8}L\u{a8}",
+                "উল্লেখ্য",
+                "la-phala variant after ল",
+            ),
             ("mswk\u{f8}\u{f3}", "সংশ্লিষ্ট", "the same variant after শ"),
             ("i\u{e6}wUb", "রুটিন", "u-kar variant after র"),
             // য় written as the precomposed U+09DF. The decomposed spelling looks
             // identical and is equally legal — that ambiguity has now cost four
             // separate defects, so it is spelled explicitly here.
-            ("ev\u{af}\u{cd}evqb", "বাস্তবা\u{9df}ন", "ta-phala variant after স"),
+            (
+                "ev\u{af}\u{cd}evqb",
+                "বাস্তবা\u{9df}ন",
+                "ta-phala variant after স",
+            ),
         ] {
             assert_eq!(convert(legacy), expected, "{note}");
         }
@@ -1018,7 +1027,14 @@ mod tests {
         assert_eq!(repair_unicode("স\u{09C7}\u{09BE}"), "সো");
 
         // Correct Bengali is untouched, and so is everything else.
-        for same in ["সর্বোচ্চ", "প্রতিবন্ধী", "অন্ন", "hello world", "", "fn main() {}"] {
+        for same in [
+            "সর্বোচ্চ",
+            "প্রতিবন্ধী",
+            "অন্ন",
+            "hello world",
+            "",
+            "fn main() {}",
+        ] {
             assert_eq!(repair_unicode(same), same);
         }
 
@@ -1034,7 +1050,10 @@ mod tests {
     fn split_vowels_are_reunited() {
         // `কিছু মনে` extracted with the space one place early.
         assert_eq!(reunite_split_vowels("কিছ ুমনে"), "কিছু মনে");
-        assert_eq!(repair_unicode("গল্প বলা- কোন কিছ ুমনে রাখার"), "গল্প বলা- কোন কিছু মনে রাখার");
+        assert_eq!(
+            repair_unicode("গল্প বলা- কোন কিছ ুমনে রাখার"),
+            "গল্প বলা- কোন কিছু মনে রাখার"
+        );
 
         // A tab is a column boundary. Merging two cells would corrupt a table.
         assert_eq!(reunite_split_vowels("কিছ\tুমনে"), "কিছ\tুমনে");
@@ -1047,7 +1066,8 @@ mod tests {
         assert_eq!(reunite_split_vowels("বাং ুমনে"), "বাং ুমনে");
 
         // Correct text is untouched.
-        for good in ["কিছু মনে", "সর্বোচ্চ কথা", "hello world"] {
+        for good in ["কিছু মনে", "সর্বোচ্চ কথা", "hello world"]
+        {
             assert_eq!(reunite_split_vowels(good), good);
         }
     }
@@ -1077,7 +1097,8 @@ mod tests {
         assert_eq!(repair_word("নারীাদের"), "নারীদের");
 
         // Correct words must pass through untouched.
-        for good in ["অনুযায়ী", "নারীদের", "সর্বোচ্চ", "প্রতিবন্ধী", "বাস্তবায়ন"] {
+        for good in ["অনুযায়ী", "নারীদের", "সর্বোচ্চ", "প্রতিবন্ধী", "বাস্তবায়ন"]
+        {
             assert_eq!(repair_word(good), good, "a correct word was altered");
         }
         // Two vowel signs are never valid Bengali, so an unknown word is still
@@ -1095,7 +1116,10 @@ mod tests {
         assert_ne!(detect(&toc).encoding, LegacyEncoding::SutonnyMj);
         assert_eq!(convert_document(&toc).lines_converted, 0);
         // Genuine Bijoy that is short and glyph-poor must still convert.
-        assert_eq!(detect("e\u{00AA}\u{00A8}v\u{00DB}").encoding, LegacyEncoding::SutonnyMj);
+        assert_eq!(
+            detect("e\u{00AA}\u{00A8}v\u{00DB}").encoding,
+            LegacyEncoding::SutonnyMj
+        );
     }
 
     /// Doubled joiners and vowel signs, from doubled keystrokes.
@@ -1163,12 +1187,18 @@ mod tests {
     fn punctuation_only_segments_are_never_converted() {
         let doc = "GwK\tGB\tKw\u{2022}\t% of total workforce, ";
         let out = convert_document(doc).text;
-        assert!(!out.contains('\u{0999}'), "a bullet became Bengali: {out:?}");
+        assert!(
+            !out.contains('\u{0999}'),
+            "a bullet became Bengali: {out:?}"
+        );
         assert!(out.contains('\u{2022}'), "the bullet vanished: {out:?}");
 
         // Question references must survive as written.
         let refs = convert_document(&format!("{LEGACY_LINE}\tE1: \"Q1-Q18\"\t2.45")).text;
-        assert!(refs.contains("Q1-Q18"), "an English reference was converted: {refs:?}");
+        assert!(
+            refs.contains("Q1-Q18"),
+            "an English reference was converted: {refs:?}"
+        );
         assert!(refs.contains("2.45"), "a number was converted: {refs:?}");
     }
 
@@ -1238,8 +1268,16 @@ mod tests {
         let cases = [
             ("eª¨vÛ", "ব্র্যান্ড", "ra-phala must NOT be treated as reph"),
             ("Kg©m~wP", "কর্মসূচি", "reph moves back over its consonant"),
-            ("wi‡cvU©", "রিপোর্ট", "reph at the end of a word; crashes the reference"),
-            ("c`‡ÿc", "পদক্ষেপ", "the ÿ form of ক্ষ, missing from the reference table"),
+            (
+                "wi‡cvU©",
+                "রিপোর্ট",
+                "reph at the end of a word; crashes the reference",
+            ),
+            (
+                "c`‡ÿc",
+                "পদক্ষেপ",
+                "the ÿ form of ক্ষ, missing from the reference table",
+            ),
             ("¯^vÿi", "স্বাক্ষর", "ÿ again, inside a conjunct"),
             ("c~e©eZ©x", "পূর্ববর্তী", "two rephs in one word"),
         ];
@@ -1247,7 +1285,9 @@ mod tests {
         for (input, expected, why) in cases {
             let got = convert(input);
             if got != expected {
-                failures.push(format!("  {input:?} -> {got:?}, expected {expected:?}  ({why})"));
+                failures.push(format!(
+                    "  {input:?} -> {got:?}, expected {expected:?}  ({why})"
+                ));
             }
         }
         assert!(failures.is_empty(), "\n{}", failures.join("\n"));
@@ -1280,12 +1320,22 @@ mod tests {
         let r = convert_document(&doc);
         let out: Vec<&str> = r.text.split('\n').collect();
 
-        assert_eq!(r.lines_converted, 1, "expected exactly one legacy line converted");
-        assert_eq!(out[0], "কার্যক্রমের সাপ্তাহিক প্রতিবেদন এবং পর্যালোচনা",
-            "an already-Unicode line was altered");
-        assert_eq!(out[2], "এই অংশটি ইতিমধ্যেই ইউনিকোডে লেখা আছে এবং বদলানো উচিত নয়",
-            "an already-Unicode line was altered");
-        assert_eq!(out[1], LEGACY_LINE_UNICODE, "the legacy line was not converted");
+        assert_eq!(
+            r.lines_converted, 1,
+            "expected exactly one legacy line converted"
+        );
+        assert_eq!(
+            out[0], "কার্যক্রমের সাপ্তাহিক প্রতিবেদন এবং পর্যালোচনা",
+            "an already-Unicode line was altered"
+        );
+        assert_eq!(
+            out[2], "এই অংশটি ইতিমধ্যেই ইউনিকোডে লেখা আছে এবং বদলানো উচিত নয়",
+            "an already-Unicode line was altered"
+        );
+        assert_eq!(
+            out[1], LEGACY_LINE_UNICODE,
+            "the legacy line was not converted"
+        );
     }
 
     #[test]
@@ -1298,15 +1348,25 @@ mod tests {
         .join("\n");
         let r = convert_document(&doc);
         let out: Vec<&str> = r.text.split('\n').collect();
-        assert_eq!(out[0], "Programme operations and budget review for the 2026 cycle.");
-        assert_eq!(out[2], "Prepared by the review team. All figures are provisional.");
+        assert_eq!(
+            out[0],
+            "Programme operations and budget review for the 2026 cycle."
+        );
+        assert_eq!(
+            out[2],
+            "Prepared by the review team. All figures are provisional."
+        );
     }
 
     #[test]
     fn a_wholly_legacy_document_still_converts_completely() {
         let doc = ["eª¨vÛ", LEGACY_LINE, "c~e©eZ©x wfwR‡U"].join("\n");
         let r = convert_document(&doc);
-        assert!(r.lines_converted >= 3, "expected every text line converted, got {}", r.lines_converted);
+        assert!(
+            r.lines_converted >= 3,
+            "expected every text line converted, got {}",
+            r.lines_converted
+        );
         assert_eq!(r.dominant, LegacyEncoding::SutonnyMj);
         assert!(r.text.contains("ব্র্যান্ড"));
     }
@@ -1317,7 +1377,11 @@ mod tests {
         // holds legacy text, and the line carries Bijoy-range bytes.
         let doc = ["eª¨vÛ", LEGACY_LINE].join("\n");
         let r = convert_document(&doc);
-        assert!(r.text.starts_with("ব্র্যান্ড"), "short heading left unconverted: {:?}", r.text);
+        assert!(
+            r.text.starts_with("ব্র্যান্ড"),
+            "short heading left unconverted: {:?}",
+            r.text
+        );
     }
 
     #[test]
@@ -1329,7 +1393,11 @@ mod tests {
         // Asserted as a property, not an exact string. `য়` has two legal
         // spellings and this comparison has already broken on that twice; what
         // matters is that no Bijoy survives and Bengali came out.
-        let bengali = r.text.chars().filter(|c| ('\u{0980}'..='\u{09FF}').contains(c)).count();
+        let bengali = r
+            .text
+            .chars()
+            .filter(|c| ('\u{0980}'..='\u{09FF}').contains(c))
+            .count();
         assert!(bengali > 8, "little or no Bengali produced: {:?}", r.text);
         assert!(
             !r.text.contains("vwqZ"),
@@ -1342,7 +1410,11 @@ mod tests {
     fn a_short_english_heading_is_left_alone() {
         let doc = ["Annex 4", LEGACY_LINE].join("\n");
         let r = convert_document(&doc);
-        assert!(r.text.starts_with("Annex 4"), "an English heading was corrupted: {:?}", r.text);
+        assert!(
+            r.text.starts_with("Annex 4"),
+            "an English heading was corrupted: {:?}",
+            r.text
+        );
     }
 
     #[test]
@@ -1385,7 +1457,10 @@ mod tests {
             "table-cell Bijoy survived: {:?}",
             r.text
         );
-        assert!(r.text.contains("\t"), "the row's column boundaries were lost");
+        assert!(
+            r.text.contains("\t"),
+            "the row's column boundaries were lost"
+        );
     }
 
     #[test]
@@ -1397,7 +1472,10 @@ mod tests {
     #[test]
     fn line_structure_is_preserved_exactly() {
         let doc = "a\n\nb\n\n\nc";
-        assert_eq!(convert_document(doc).text.matches('\n').count(), doc.matches('\n').count());
+        assert_eq!(
+            convert_document(doc).text.matches('\n').count(),
+            doc.matches('\n').count()
+        );
     }
 
     #[test]
@@ -1414,4 +1492,3 @@ mod tests {
         }
     }
 }
-
