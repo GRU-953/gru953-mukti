@@ -114,9 +114,23 @@ fn collect_runs(xml: &str, out: &mut Vec<Run>) -> Result<(), quick_xml::Error> {
             Event::Text(e) if in_text => {
                 text.push_str(&e.unescape().unwrap_or_default());
             }
+            // A paragraph, table cell or slide line ends the word that was in
+            // progress. Without this the last word of one paragraph and the
+            // first of the next are rejoined into a single nonsense token.
+            Event::End(e)
+                if matches!(local_name(e.name().as_ref()), b"p" | b"tc" | b"br" | b"si") =>
+            {
+                out.push(Run {
+                    text: "\n".to_owned(),
+                    font: None,
+                });
+            }
             Event::End(e) if local_name(e.name().as_ref()) == b"t" => {
                 in_text = false;
-                if !text.trim().is_empty() {
+                // Whitespace-only runs are KEPT. Word stores a single space
+                // as its own run, and dropping those glued adjacent words
+                // together when the text was rejoined.
+                if !text.is_empty() {
                     out.push(Run {
                         text: std::mem::take(&mut text),
                         font: font.clone(),
@@ -143,11 +157,15 @@ mod tests {
         </w:p>"#;
         let mut runs = Vec::new();
         collect_runs(xml, &mut runs).unwrap();
-        assert_eq!(runs.len(), 2);
-        assert_eq!(runs[0].text, "Kg");
-        assert_eq!(runs[0].font.as_deref(), Some("SutonnyMJ"));
-        assert_eq!(runs[1].text, "plain");
-        assert_eq!(runs[1].font, None, "a font leaked into the next run");
+        let text: Vec<&Run> = runs.iter().filter(|r| r.text.trim() != "").collect();
+        assert_eq!(text.len(), 2);
+        assert_eq!(text[0].text, "Kg");
+        assert_eq!(text[0].font.as_deref(), Some("SutonnyMJ"));
+        assert_eq!(text[1].text, "plain");
+        assert_eq!(text[1].font, None, "a font leaked into the next run");
+        // The paragraph end is emitted so words either side of it are never
+        // rejoined into one when the runs are concatenated.
+        assert_eq!(runs.last().unwrap().text, "\n");
     }
 
     #[test]
@@ -166,7 +184,7 @@ mod tests {
     }
 
     #[test]
-    fn a_preserved_space_is_kept_as_its_own_run() {
+    fn a_preserved_space_keeps_two_words_apart() {
         // Word stores a run of one space this way. Dropping it would join the
         // words either side of it into one.
         let xml = r#"<w:p>
@@ -176,11 +194,19 @@ mod tests {
         </w:p>"#;
         let mut runs = Vec::new();
         collect_runs(xml, &mut runs).unwrap();
-        // The whitespace-only run is not emitted, but the two words stay apart
-        // because the caller joins runs with a space.
-        assert_eq!(runs.len(), 2);
-        assert_eq!(runs[0].text, "Awd");
-        assert_eq!(runs[1].text, "bvgt");
+        // Concatenating every run must reproduce the text with its spacing
+        // intact, because that is what the caller tokenises.
+        let joined: String = runs.iter().map(|r| r.text.as_str()).collect();
+        assert_eq!(
+            joined.trim_end(),
+            "Awd bvgt",
+            "spacing was lost: {joined:?}"
+        );
+        assert_eq!(
+            joined.split_whitespace().collect::<Vec<_>>(),
+            vec!["Awd", "bvgt"],
+            "the two words were glued together"
+        );
     }
 
     #[test]

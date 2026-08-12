@@ -53,7 +53,66 @@ pub enum Verdict {
 /// presence is the single cheapest piece of evidence available.
 fn is_bijoy_range(c: char) -> bool {
     let o = c as u32;
+    // Superscripts and subscripts (U+2070-U+209F) sit inside the punctuation
+    // block but Bijoy uses none of them. Counting them made `(SO₂)` and
+    // `(CH₄)` look like dense Bijoy, and chemical formulae in an environmental
+    // report became Bengali.
+    if (0x2070..=0x209F).contains(&o) {
+        return false;
+    }
     (0x00A0..=0x024F).contains(&o) || (0x2010..=0x20FF).contains(&o)
+}
+
+/// A Roman-numeral list marker: `iv)`, `iii)`, `II.`, `(vi)`.
+///
+/// These are ordinary English document furniture, and each is also a valid
+/// Bijoy string that converts to a real Bengali word — `iv)` becomes `রা)`.
+///
+/// **The list punctuation is required, and that is the whole subtlety.** A
+/// first version matched any short word spelled from Roman-numeral letters,
+/// and cost 2.2% of recall in one measurement: `cv` is পা, `ci` is পর, `mi`
+/// is সর — common Bengali syllables built from exactly those letters. Fifty-two
+/// false positives were fixed and roughly 3,900 real conversions lost, which
+/// is a bad trade in the direction that matters least.
+///
+/// So the marker must LOOK like a list marker: numerals, then `)`, `.` or `:`,
+/// optionally wrapped in brackets. Bare `iv` stays convertible.
+fn is_roman_numeral_marker(word: &str) -> bool {
+    if !word.is_ascii() {
+        return false;
+    }
+    let trimmed = word.trim_start_matches('(');
+    let Some(body) = trimmed
+        .strip_suffix(')')
+        .or_else(|| trimmed.strip_suffix('.'))
+        .or_else(|| trimmed.strip_suffix(':'))
+    else {
+        return false;
+    };
+    !body.is_empty()
+        && body.len() <= 4
+        && body.chars().all(|c| {
+            matches!(
+                c.to_ascii_lowercase(),
+                'i' | 'v' | 'x' | 'l' | 'c' | 'd' | 'm'
+            )
+        })
+}
+
+/// Does this carry a subscript or superscript digit?
+///
+/// `SO₂`, `CH₄`, `m³`. Bijoy has no such glyph, so their presence says the
+/// token is scientific or mathematical notation rather than Bengali — and
+/// leaving it merely *uncertain* is not enough, because a chemical formula in
+/// an environmental report sits surrounded by Bengali and context would then
+/// convert it.
+fn has_sub_or_superscript(word: &str) -> bool {
+    // ONLY the true sub/superscript block. The Latin-1 forms `¹ ² ³` look like
+    // they belong here and do not: the conversion table uses all three as
+    // Bijoy glyphs — `j²x` is লক্ষ্মী. Including them cost 2.2% of recall, which
+    // is how they came to be checked against the table rather than assumed.
+    word.chars()
+        .any(|c| (0x2070..=0x209F).contains(&(c as u32)))
 }
 
 /// What one word looks like, before any judgement is made about it.
@@ -183,7 +242,7 @@ fn judge_alone(word: &str, dictionary: &Dictionary) -> Verdict {
     }
     // A common English word stays English whatever else is true of it. This
     // is the guard on the error that matters: silently wrecking readable text.
-    if f.is_english {
+    if f.is_english || is_roman_numeral_marker(word) || has_sub_or_superscript(word) {
         return Verdict::NotLegacy;
     }
 
@@ -197,6 +256,10 @@ fn judge_alone(word: &str, dictionary: &Dictionary) -> Verdict {
     // possible. This carries words the dictionary has never heard of — names,
     // places, technical terms — which are common and must not be abandoned
     // merely for being rare.
+    // Two distinct glyphs, not one. Relaxing this to one was tried and
+    // reverted: it bought 0.27% recall and cost a twentyfold rise in false
+    // positives on digits and punctuation (0.040% -> 0.797%), breaking the
+    // aggregate gate. The bar stays where the measurement put it.
     if f.exotic_ratio >= 0.10 && f.distinct_exotic >= 2 && f.converted_plausible {
         return Verdict::Legacy;
     }
@@ -330,6 +393,32 @@ mod tests {
             ("\u{af}^v\u{ff}i", "স্বাক্ষর"),
         ] {
             assert_eq!(judge(word), Verdict::Legacy, "missed {word} ({means})");
+        }
+    }
+
+    /// Numbered lists and chemical formulae are English document furniture.
+    #[test]
+    fn list_markers_and_formulae_are_left_alone() {
+        // Every one of these converts to a real Bengali word, which is exactly
+        // why they need naming: `iv)` becomes `রা)`.
+        for marker in ["i)", "iv)", "iii)", "(vi)", "II.", "x.", "(iv)"] {
+            assert_eq!(judge(marker), Verdict::NotLegacy, "converted {marker}");
+        }
+        // Subscripts are not Bijoy glyphs.
+        for formula in ["(SO\u{2082})", "(CH\u{2084})", "(O\u{2083})"] {
+            assert_eq!(judge(formula), Verdict::NotLegacy, "converted {formula}");
+        }
+        // Bijoy syllables are spelled from these very letters. Without the
+        // list punctuation they must NOT be taken for numerals — an earlier
+        // version did, and cost 2.2% of recall.
+        for bijoy in ["cv", "ci", "mi", "iv", "vi", "dv"] {
+            assert!(
+                !is_roman_numeral_marker(bijoy),
+                "{bijoy} taken for a numeral"
+            );
+        }
+        for word in ["did", "mild", "civil", "climax"] {
+            assert!(!is_roman_numeral_marker(word), "{word} taken for a numeral");
         }
     }
 

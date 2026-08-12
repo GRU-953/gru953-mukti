@@ -72,6 +72,10 @@ enum Label {
     /// Digits, punctuation and symbols only. Carries no evidence of any
     /// encoding and must pass through untouched.
     Inert,
+    /// The run declared no font at all, so nothing in the document says
+    /// whether this pure-ASCII token is English or Bijoy. Excluded: a guessed
+    /// label is worse than none, because it becomes the answer key.
+    UnknownFont,
     /// The declared font and the actual bytes contradict each other: a
     /// non-legacy font, but Bijoy-range characters in the text. Excluded from
     /// every figure, because a label nobody can trust is worse than no label.
@@ -88,6 +92,7 @@ impl Label {
             Label::English => "english",
             Label::Inert => "inert",
             Label::FontDisputed => "font_disputed",
+            Label::UnknownFont => "unknown_font",
         }
     }
 }
@@ -114,6 +119,31 @@ fn classify(token: &str, font: Option<&str>) -> Label {
     // that would corrupt it, so the text wins over the label.
     if has_unicode_bengali(token) {
         return Label::Unicode;
+    }
+
+    // Digits and punctuation keep their label whoever set them, so the test is
+    // for *letters*, not alphanumerics — `2026` and `(12.5%)` are inert.
+    //
+    // Bijoy does map the digits, so `2026` inside a legacy run really is ২০২৬,
+    // and that case is still caught below by the font. What this line settles
+    // is only the fontless case, where treating a bare number as ordinary is
+    // both the safer answer and the one the previous labelling already gave.
+    let inert = !token.chars().any(|c| c.is_ascii_alphabetic());
+
+    // **No declared font means no label.**
+    //
+    // 16.6% of tokens sit in runs that inherit their font from a paragraph
+    // style, and for a pure-ASCII token the font is the *only* thing that
+    // could say whether it is English or Bijoy — `bvg` is নাম and it is also
+    // three Latin letters. Calling those English was quietly filling the
+    // English class with genuine legacy text, so that `bvg` -> নাম, a correct
+    // conversion, counted as a false positive. It was the single largest
+    // source of apparent English errors.
+    //
+    // `office.rs` has always said an inherited font is a guess with no place
+    // in an answer key. This is the line that finally makes that true.
+    if font.is_none() && !inert {
+        return Label::UnknownFont;
     }
 
     let family = font.map(str::to_lowercase).unwrap_or_default();
@@ -266,15 +296,63 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let split = split_of(path);
         let mut legacy_here = 0usize;
 
+        // Rejoin the runs into one stream before tokenising.
+        //
+        // Word splits a single word across several runs whenever formatting
+        // changes inside it — a spell-check marker, a language attribute, a
+        // stray bold character. Tokenising each run separately turned `†_‡K`
+        // (থেকে) into three "words", and lone glyphs like `†` and `¨` were
+        // then the most-missed "legacy words" in the whole measurement: 5,251
+        // and 2,371 of them, none of which is a word at all.
+        //
+        // Rejoining also makes the labelled stream match what the classifier
+        // actually receives — whole document text, split on whitespace — which
+        // is the only way the two can be compared honestly.
+        let mut buffer = String::new();
+        let mut fonts: Vec<Option<String>> = Vec::new();
         for run in runs {
-            for token in run.text.split_whitespace() {
-                let label = classify(token, run.font.as_deref());
-                if matches!(label, Label::Legacy | Label::LegacyAscii) {
-                    legacy_here += 1;
-                }
-                *counts.entry((split, label)).or_default() += 1;
-                writeln!(writer, "{split}\t{doc}\t{}\t{token}", label.as_str())?;
+            for ch in run.text.chars() {
+                buffer.push(ch);
+                fonts.push(run.font.clone());
             }
+        }
+
+        let mut index = 0usize;
+        for piece in buffer.split_inclusive(char::is_whitespace) {
+            let len = piece.chars().count();
+            let token = piece.trim_end();
+            if token.is_empty() {
+                index += len;
+                continue;
+            }
+            // A token may span runs with different fonts. A legacy font
+            // anywhere in it wins: half a word set in SutonnyMJ is still a
+            // legacy word, and it is the half that decides.
+            let font = fonts[index..index + token.chars().count()]
+                .iter()
+                .flatten()
+                .find(|f| {
+                    let lower = f.to_lowercase();
+                    SUTONNY
+                        .iter()
+                        .chain(OTHER_LEGACY)
+                        .any(|n| lower.contains(n))
+                })
+                .or_else(|| {
+                    fonts[index..index + token.chars().count()]
+                        .iter()
+                        .flatten()
+                        .next()
+                })
+                .cloned();
+            index += len;
+
+            let label = classify(token, font.as_deref());
+            if matches!(label, Label::Legacy | Label::LegacyAscii) {
+                legacy_here += 1;
+            }
+            *counts.entry((split, label)).or_default() += 1;
+            writeln!(writer, "{split}\t{doc}\t{}\t{token}", label.as_str())?;
         }
         if legacy_here > 0 {
             documents_with_legacy += 1;
@@ -307,6 +385,7 @@ fn report(
         Label::English,
         Label::Inert,
         Label::FontDisputed,
+        Label::UnknownFont,
     ];
     println!("\n{files} files, {with_legacy} carrying legacy text, {unreadable} unreadable.\n");
     println!(
@@ -390,7 +469,7 @@ mod tests {
     #[test]
     fn ordinary_text_is_labelled_by_what_it_is() {
         assert_eq!(classify("Programme", Some("Calibri")), Label::English);
-        assert_eq!(classify("Programme", None), Label::English);
+        assert_eq!(classify("Programme", None), Label::UnknownFont);
         assert_eq!(classify("2026", Some("Calibri")), Label::Inert);
         assert_eq!(classify("—", None), Label::Inert);
         assert_eq!(classify("(12.5%)", None), Label::Inert);
@@ -413,8 +492,13 @@ mod tests {
         // English typography lives in the same byte range at the EDGES of
         // words, and must not be dragged in with it.
         assert_eq!(classify("\u{2014}", None), Label::Inert);
-        assert_eq!(classify("\u{201c}quoted\u{201d}", None), Label::English);
-        assert_eq!(classify("Ltd.\u{a9}", None), Label::English);
+        // Pure ASCII with no font declared cannot be judged at all.
+        assert_eq!(classify("bvg", None), Label::UnknownFont);
+        assert_eq!(
+            classify("\u{201c}quoted\u{201d}", Some("Calibri")),
+            Label::English
+        );
+        assert_eq!(classify("Ltd.\u{a9}", Some("Calibri")), Label::English);
     }
 
     #[test]

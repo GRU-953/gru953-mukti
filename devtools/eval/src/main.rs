@@ -454,11 +454,13 @@ fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>
     // a token that recurs is ordinary vocabulary, not somebody's name or a
     // one-off reference, so this can be looked at without reading documents.
     let mut wrong_english: BTreeMap<String, usize> = BTreeMap::new();
+    let mut missed_legacy: BTreeMap<String, usize> = BTreeMap::new();
 
     let flush = |words: &mut Vec<String>,
                  labels: &mut Vec<&'static str>,
                  counts: &mut BTreeMap<&'static str, (usize, usize)>,
-                 wrong: &mut BTreeMap<String, usize>| {
+                 wrong: &mut BTreeMap<String, usize>,
+                 missed: &mut BTreeMap<String, usize>| {
         if words.is_empty() {
             return;
         }
@@ -470,6 +472,12 @@ fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>
             entry.1 += 1;
             if *verdict == Verdict::Legacy && *label == "english" {
                 *wrong.entry((*word).to_owned()).or_default() += 1;
+            }
+            // And the other direction: legacy words we failed to convert.
+            // Recall is the open gate, so what is being missed matters as
+            // much as what is wrongly taken.
+            if *verdict != Verdict::Legacy && *label == "legacy" {
+                *missed.entry((*word).to_owned()).or_default() += 1;
             }
         }
         words.clear();
@@ -490,13 +498,25 @@ fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>
             _ => continue,
         };
         if row.doc != doc {
-            flush(&mut words, &mut labels, &mut counts, &mut wrong_english);
+            flush(
+                &mut words,
+                &mut labels,
+                &mut counts,
+                &mut wrong_english,
+                &mut missed_legacy,
+            );
             doc = row.doc;
         }
         words.push(row.token);
         labels.push(name);
     }
-    flush(&mut words, &mut labels, &mut counts, &mut wrong_english);
+    flush(
+        &mut words,
+        &mut labels,
+        &mut counts,
+        &mut wrong_english,
+        &mut missed_legacy,
+    );
 
     let get = |k: &str| counts.get(k).copied().unwrap_or((0, 0));
     let (legacy_hit, legacy_n) = get("legacy");
@@ -542,6 +562,17 @@ fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>
     println!("    {}", Proportion::new(amb_hit, amb_n).describe());
     println!("    These are real legacy words that carry no evidence of it. Every one");
     println!("    recovered here was recovered from its neighbours alone.");
+
+    let mut miss: Vec<_> = missed_legacy.iter().collect();
+    miss.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    println!("\n  Legacy words most often MISSED (recall is the open gate):");
+    for (token, count) in miss.iter().take(20) {
+        println!(
+            "    {:>6}x  {token}  would have been  {}",
+            thousands(**count),
+            convert(token)
+        );
+    }
 
     let mut worst: Vec<_> = wrong_english.iter().collect();
     worst.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
