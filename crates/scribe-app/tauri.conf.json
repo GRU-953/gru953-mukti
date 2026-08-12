@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "GRU953 Scribe",
+  "version": "0.2.0",
+  "identifier": "app.gru953.scribe",
+  "build": {
+    "frontendDist": "ui"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "GRU953 Scribe",
+        "width": 1100,
+        "height": 700,
+        "minWidth": 480,
+        "minHeight": 400,
+        "dragDropEnabled": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Productivity",
+    "shortDescription": "Convert legacy Bangla text to Unicode.",
+    "longDescription": "Converts legacy Bijoy and SutonnyMJ Bangla into Unicode, word by word, leaving English, numbers and existing Unicode Bengali exactly as they were. Works entirely offline.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
+  }
+}

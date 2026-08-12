@@ -1,0 +1,21 @@
+[package]
+name = "scribe-app"
+description = "GRU953 Scribe — the desktop app."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+gru953-scribe = { path = "../scribe-core" }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+
+[lints]
+workspace = true

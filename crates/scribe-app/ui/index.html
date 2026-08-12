@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GRU953 Scribe</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="bar">
+  <h1>GRU953 Scribe</h1>
+  <p class="lede" data-i18n="lede">Turn legacy Bangla into Unicode. Only the legacy words change.</p>
+  <div class="bar-actions">
+    <button type="button" id="theme" class="btn" aria-pressed="false" data-i18n="theme">Dark</button>
+  </div>
+</header>
+
+<main>
+  <section class="panes" aria-label="Convert text">
+    <div class="pane">
+      <div class="pane-head">
+        <label for="input" data-i18n="inputLabel">Paste legacy Bangla here</label>
+        <button type="button" id="open" class="btn" data-i18n="open">Open a file</button>
+      </div>
+      <textarea id="input" spellcheck="false" autocomplete="off"
+        aria-describedby="drophint"
+        data-i18n-placeholder="placeholder"
+        placeholder="Paste text, or drop a file anywhere on this window."></textarea>
+      <p class="hint" id="drophint" data-i18n="drophint">You can also drop a .txt, .csv or .md file onto the window.</p>
+    </div>
+
+    <div class="pane">
+      <div class="pane-head">
+        <span id="outlabel" data-i18n="outputLabel">Result</span>
+        <div>
+          <button type="button" id="highlight" class="btn" aria-pressed="true" data-i18n="highlight">Show what changed</button>
+          <button type="button" id="copy" class="btn" data-i18n="copy">Copy</button>
+          <button type="button" id="save" class="btn btn-primary" data-i18n="save">Save as…</button>
+        </div>
+      </div>
+      <!-- Not a textarea: the changed words are marked up so you can see
+           exactly what Scribe touched, rather than having to trust it. -->
+      <div id="output" class="output" lang="bn" tabindex="0" role="region"
+           aria-live="polite" aria-labelledby="outlabel"></div>
+    </div>
+  </section>
+
+  <p id="status" class="status" role="status"></p>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

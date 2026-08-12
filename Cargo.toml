@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/scribe-core",
     "crates/scribe-cli",
+    "crates/scribe-app",
     "devtools/lexicon-build",
     "devtools/corpus-label",
     "devtools/eval",

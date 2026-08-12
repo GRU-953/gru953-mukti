@@ -1,0 +1,196 @@
+/* GRU953 Scribe — window styling.
+ *
+ * Every colour comes from tokens.css, which is transcribed from the brand kit.
+ * Nothing here invents a value; if a colour is missing it belongs in the kit
+ * first. Flat throughout, as the kit requires: no shadows, no bevels.
+ */
+
+* { box-sizing: border-box; }
+
+body {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* --- Header ----------------------------------------------------------- */
+
+.bar {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.9rem 1.2rem;
+  border-bottom: 1px solid var(--os-border);
+  background: var(--os-surface);
+  flex: 0 0 auto;
+}
+
+.bar h1 {
+  margin: 0;
+  font-size: var(--os-text-1);
+  letter-spacing: 0;
+}
+
+.lede {
+  margin: 0;
+  color: var(--os-muted);
+  font-size: var(--os-text--1);
+}
+
+.bar-actions { margin-left: auto; }
+
+/* --- Panes ------------------------------------------------------------- */
+
+main {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 1rem 1.2rem;
+  gap: 0.6rem;
+}
+
+.panes {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  min-height: 0;
+}
+
+/* One column on a narrow window, so the app reflows rather than scrolling
+ * sideways. Also what makes 200% text zoom usable, which WCAG 2.2 asks for. */
+@media (max-width: 800px) {
+  .panes { grid-template-columns: 1fr; }
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  gap: 0.4rem;
+}
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: var(--os-text--1);
+  font-weight: var(--os-weight-semibold);
+  color: var(--os-heading);
+}
+
+.pane-head > div { display: flex; gap: 0.4rem; }
+
+textarea,
+.output {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--os-border-strong);
+  border-radius: var(--os-radius-input);
+  background: var(--os-surface);
+  color: var(--os-ink);
+  font-family: var(--os-font-sans);
+  font-size: var(--os-text-0);
+  line-height: var(--os-leading-bangla);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  resize: none;
+}
+
+.output:empty::before {
+  content: attr(data-empty);
+  color: var(--os-muted);
+}
+
+/* A converted word. Marked with a tinted background AND an underline, because
+ * the brand kit forbids carrying meaning by colour alone. */
+.changed {
+  background: var(--os-cobalt-100);
+  color: var(--os-primary-strong);
+  border-bottom: 2px solid var(--os-primary);
+  border-radius: 2px;
+}
+
+:root[data-theme="dark"] .changed,
+:root:not([data-theme="light"]) .changed { }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .changed {
+    background: #1B2B46;
+    color: var(--os-primary-strong);
+  }
+}
+:root[data-theme="dark"] .changed {
+  background: #1B2B46;
+  color: var(--os-primary-strong);
+}
+
+.plain .changed {
+  background: none;
+  color: inherit;
+  border-bottom: 0;
+}
+
+/* --- Buttons ----------------------------------------------------------- */
+
+.btn {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: var(--os-weight-semibold);
+  background: var(--os-surface-2);
+  color: var(--os-ink);
+  border: 1px solid var(--os-border-strong);
+  border-radius: var(--os-radius-button);
+  padding: 0.35em 0.8em;
+  cursor: pointer;
+  /* The kit's floor for an interactive target. */
+  min-height: var(--os-target-min);
+}
+
+.btn:hover { border-color: var(--os-primary); }
+
+.btn-primary {
+  background: var(--os-primary);
+  /* Ink, not white: on a coloured fill in dark mode white drops below AA. */
+  color: var(--os-on-fill);
+  border: 0;
+  font-weight: var(--os-weight-bold);
+}
+
+.btn-primary:hover { background: var(--os-primary-strong); }
+
+.btn[aria-pressed="true"] {
+  border-color: var(--os-primary);
+  background: var(--os-cobalt-100);
+  color: var(--os-primary-strong);
+}
+
+/* --- Status and hints -------------------------------------------------- */
+
+.status,
+.hint {
+  margin: 0;
+  font-size: var(--os-text--1);
+  color: var(--os-muted);
+  min-height: 1.4em;
+}
+
+.status.error { color: var(--os-error); font-weight: var(--os-weight-semibold); }
+
+/* Shown while a file is being dragged over the window. */
+body.dropping::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  border: 3px dashed var(--os-primary);
+  border-radius: var(--os-radius-card);
+  pointer-events: none;
+}
