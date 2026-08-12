@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-gru953-scribe = { path = "../scribe-core" }
+gru953-scribe = { path = "../scribe-core", version = "0.3.0" }
 quick-xml = "0.37"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 lopdf = "0.36"
