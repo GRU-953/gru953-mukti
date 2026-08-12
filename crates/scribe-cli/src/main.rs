@@ -25,15 +25,18 @@ use gru953_scribe::convert;
 use gru953_scribe::dictionary::Dictionary;
 use gru953_scribe::encoding::{decode, TextEncoding};
 use gru953_scribe::tokenise::{tokenise, Kind};
+use scribe_formats::convert_office;
 
 const USAGE: &str = "\
 GRU953 Scribe — convert legacy Bangla text to Unicode.
 
   scribe convert <file>...    convert files, writing a new file beside each one
+                             (.txt .csv .md .json and .docx .xlsx .pptx)
   scribe check <file>...      say what would change, and write nothing
   scribe convert -            read from the keyboard or a pipe, write to screen
 
 Options
+  --font <name>     the Bengali font to set in Office files (default: Nirmala UI)
   --in-place        overwrite the original file instead of writing a new one
   --out <file>      write the result to this file (one input file only)
   --quiet           print nothing but errors
@@ -72,12 +75,21 @@ fn run() -> Result<ExitCode, String> {
     let mut in_place = false;
     let mut quiet = false;
     let mut out: Option<PathBuf> = None;
+    // Nirmala UI ships with Windows and covers Bengali; it is the safest
+    // default for a document that will most likely be opened in Word. Anyone
+    // who prefers SolaimanLipi or Kalpurush can say so.
+    let mut font = String::from("Nirmala UI");
 
     let mut it = args.into_iter();
     while let Some(arg) = it.next() {
         match arg.as_str() {
             "convert" if mode.is_none() => mode = Some(Mode::Convert),
             "check" if mode.is_none() => mode = Some(Mode::Check),
+            "--font" => {
+                font = it
+                    .next()
+                    .ok_or_else(|| "--font needs a font name after it.".to_owned())?
+            }
             "--in-place" => in_place = true,
             "--quiet" | "-q" => quiet = true,
             "--out" => {
@@ -116,7 +128,7 @@ fn run() -> Result<ExitCode, String> {
     let mut total = Tally::default();
 
     for path in &files {
-        match handle(path, mode, in_place, out.as_deref(), quiet) {
+        match handle(path, mode, in_place, out.as_deref(), quiet, &font) {
             Ok(tally) => total.add(tally),
             Err(message) => {
                 eprintln!("{message}");
@@ -167,14 +179,30 @@ impl Tally {
     }
 }
 
+/// Word, Excel and PowerPoint files, which are converted in place inside the
+/// document rather than turned into plain text.
+fn is_office(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_lowercase)
+            .as_deref(),
+        Some("docx" | "xlsx" | "pptx")
+    )
+}
+
 fn handle(
     path: &Path,
     mode: Mode,
     in_place: bool,
     out: Option<&Path>,
     quiet: bool,
+    font: &str,
 ) -> Result<Tally, String> {
     let from_pipe = path.as_os_str() == "-";
+    if is_office(path) && !from_pipe {
+        return handle_office(path, mode, in_place, out, quiet, font);
+    }
 
     let bytes = if from_pipe {
         let mut buf = Vec::new();
@@ -235,6 +263,65 @@ fn handle(
                 }
             }
         }
+    }
+    Ok(tally)
+}
+
+/// Convert a Word, Excel or PowerPoint file, keeping its formatting.
+fn handle_office(
+    path: &Path,
+    mode: Mode,
+    in_place: bool,
+    out: Option<&Path>,
+    quiet: bool,
+    font: &str,
+) -> Result<Tally, String> {
+    let bytes = fs::read(path).map_err(|e| {
+        format!(
+            "Could not open {}: {e}\nCheck the name is right and that the file is not open in another programme.",
+            path.display()
+        )
+    })?;
+    let (converted, summary) = convert_office(&bytes, font).map_err(|e| {
+        format!(
+            "Could not read {} as an Office file: {e}\nIf it is an older .doc, .xls or .ppt, save it as .docx, .xlsx or .pptx first.",
+            path.display()
+        )
+    })?;
+    let tally = Tally {
+        converted: summary.words_converted,
+        untouched: summary.words_untouched,
+    };
+
+    if mode == Mode::Check {
+        if !quiet {
+            println!("{}: {}", path.display(), tally.describe(mode));
+            println!(
+                "  {} font settings would change to {font}.",
+                summary.fonts_changed
+            );
+        }
+        return Ok(tally);
+    }
+
+    let destination = match out {
+        Some(o) => o.to_path_buf(),
+        None if in_place => path.to_path_buf(),
+        None => beside(path),
+    };
+    fs::write(&destination, &converted).map_err(|e| {
+        format!(
+            "Could not write {}: {e}\nCheck you have permission to write to that folder.",
+            destination.display()
+        )
+    })?;
+    if !quiet {
+        println!("{} -> {}", path.display(), destination.display());
+        println!("  {}", tally.describe(mode));
+        println!(
+            "  {} font settings changed to {font}; formatting and images untouched.",
+            summary.fonts_changed
+        );
     }
     Ok(tally)
 }

@@ -394,8 +394,7 @@ dependencies = [
 name = "corpus-label"
 version = "0.2.0"
 dependencies = [
- "quick-xml 0.37.5",
- "zip",
+ "scribe-formats",
 ]
 
 [[package]]
@@ -2689,6 +2688,16 @@ name = "scribe-cli"
 version = "0.2.0"
 dependencies = [
  "gru953-scribe",
+ "scribe-formats",
+]
+
+[[package]]
+name = "scribe-formats"
+version = "0.2.0"
+dependencies = [
+ "gru953-scribe",
+ "quick-xml 0.37.5",
+ "zip",
 ]
 
 [[package]]

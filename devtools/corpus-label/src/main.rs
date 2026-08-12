@@ -26,7 +26,7 @@
 //! splitting at token level would put near-duplicates on both sides and every
 //! reported figure would be flattering and wrong.
 
-mod office;
+use scribe_formats::office;
 
 use std::collections::BTreeMap;
 use std::fs;

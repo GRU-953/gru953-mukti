@@ -1,6 +1,6 @@
 [package]
-name = "scribe-cli"
-description = "GRU953 Scribe on the command line: convert legacy Bangla files to Unicode."
+name = "scribe-formats"
+description = "Read and rewrite the text inside Word, Excel and PowerPoint files, keeping everything else exactly as it was."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,13 +8,10 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
-[[bin]]
-name = "scribe"
-path = "src/main.rs"
-
 [dependencies]
 gru953-scribe = { path = "../scribe-core" }
-scribe-formats = { path = "../scribe-formats" }
+quick-xml = "0.37"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [lints]
 workspace = true

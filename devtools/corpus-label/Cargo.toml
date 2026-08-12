@@ -10,8 +10,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-quick-xml = "0.37"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+scribe-formats = { path = "../../crates/scribe-formats" }
 
 [lints]
 workspace = true
