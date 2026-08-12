@@ -25,7 +25,7 @@ use gru953_scribe::convert;
 use gru953_scribe::dictionary::Dictionary;
 use gru953_scribe::encoding::{decode, TextEncoding};
 use gru953_scribe::tokenise::{tokenise, Kind};
-use scribe_formats::convert_office;
+use scribe_formats::{convert_office, convert_pdf_to_text};
 
 const USAGE: &str = "\
 GRU953 Scribe — convert legacy Bangla text to Unicode.
@@ -203,6 +203,16 @@ fn handle(
     if is_office(path) && !from_pipe {
         return handle_office(path, mode, in_place, out, quiet, font);
     }
+    if !from_pipe
+        && path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_lowercase)
+            .as_deref()
+            == Some("pdf")
+    {
+        return handle_pdf(path, mode, out, quiet);
+    }
 
     let bytes = if from_pipe {
         let mut buf = Vec::new();
@@ -262,6 +272,52 @@ fn handle(
                     println!("  Read as Windows-1252 and written as UTF-8.");
                 }
             }
+        }
+    }
+    Ok(tally)
+}
+
+/// Read a PDF and write the converted text beside it.
+///
+/// A PDF is the one format that cannot be converted in place: its glyphs are
+/// individually positioned and it carries no Unicode Bengali font to draw the
+/// result with, so rewriting one would be a typesetting job. The user is told
+/// this rather than left to discover it — the layout does not survive, and
+/// somebody expecting their tables back would otherwise think it had failed.
+fn handle_pdf(path: &Path, mode: Mode, out: Option<&Path>, quiet: bool) -> Result<Tally, String> {
+    let bytes = fs::read(path).map_err(|e| format!("Could not open {}: {e}", path.display()))?;
+    let (text, summary) = convert_pdf_to_text(&bytes).map_err(|e| {
+        format!(
+            "Could not read {} as a PDF.\nIf it is a scanned image rather than text, there are no letters in it to convert.\n(The technical reason: {e})",
+            path.display()
+        )
+    })?;
+    let tally = Tally {
+        converted: summary.words_converted,
+        untouched: summary.words_untouched,
+    };
+    if mode == Mode::Check {
+        if !quiet {
+            println!("{}: {}", path.display(), tally.describe(mode));
+        }
+        return Ok(tally);
+    }
+    let destination = out
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| path.with_extension("unicode.txt"));
+    fs::write(&destination, text.as_bytes())
+        .map_err(|e| format!("Could not write {}: {e}", destination.display()))?;
+    if !quiet {
+        println!("{} -> {}", path.display(), destination.display());
+        println!("  {}", tally.describe(mode));
+        println!("  Written as plain text: a PDF's layout cannot be carried over.");
+        if summary.fonts_changed > 0 {
+            println!(
+                "  {} pieces of text could NOT be read and were left out: they are drawn",
+                summary.fonts_changed
+            );
+            println!("  with fonts that store glyph shapes rather than letters. Guessing at");
+            println!("  those would produce convincing nonsense, so they are skipped instead.");
         }
     }
     Ok(tally)

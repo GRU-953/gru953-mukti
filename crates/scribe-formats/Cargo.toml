@@ -12,6 +12,7 @@ authors.workspace = true
 gru953-scribe = { path = "../scribe-core" }
 quick-xml = "0.37"
 zip = { version = "2", default-features = false, features = ["deflate"] }
+lopdf = "0.36"
 
 [lints]
 workspace = true
