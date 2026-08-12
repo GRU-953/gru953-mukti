@@ -23,7 +23,7 @@ Works completely offline. No account, no upload, no network.
 
 ## Install
 
-Download from the [latest release](https://github.com/GRU-953/gru953-mukti-rs/releases/latest).
+Download from the [latest release](https://github.com/GRU-953/Mukti-app/releases/latest).
 
 | Your computer | Download |
 |---|---|
