@@ -129,7 +129,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// every lookup asks the same question. This distinction has already cost this
 /// codebase four separate defects.
 fn clean(line: &str) -> Option<String> {
-    let word = normalise_nukta(line.trim().trim_start_matches('\u{FEFF}'));
+    let word = normalise_nukta(line.trim().trim_start_matches('\u{FEFF}'))
+        // Two-part vowels, for exactly the same reason as the nukta. `ো` is one
+        // character (U+09CB) and also, equally legally, `ে` followed by `া`
+        // (U+09C7 U+09BE); Unicode calls them canonically equivalent and they
+        // render identically. The source list spells 3,700 of its words the
+        // decomposed way. A dictionary holding both spellings would still tell
+        // the next caller their perfectly ordinary word does not exist, so it
+        // settles on the composed form — which is what Scribe itself produces.
+        .replace("\u{09C7}\u{09BE}", "\u{09CB}")
+        .replace("\u{09C7}\u{09D7}", "\u{09CC}");
     if word.is_empty() {
         return None;
     }
@@ -206,6 +215,17 @@ mod tests {
         {
             assert!(clean(rejected).is_none(), "accepted {rejected:?}");
         }
+    }
+
+    #[test]
+    fn both_spellings_of_a_two_part_vowel_land_on_one_entry() {
+        // `গুলো` written with the composed o-kar and with its two halves.
+        // Unicode calls these the same word; so must the dictionary.
+        let composed = "গুল\u{09CB}";
+        let decomposed = "গুল\u{09C7}\u{09BE}";
+        assert_ne!(composed, decomposed, "the two spellings differ as bytes");
+        assert_eq!(clean(composed), clean(decomposed));
+        assert_eq!(clean(decomposed).as_deref(), Some(composed));
     }
 
     #[test]

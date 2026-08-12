@@ -1,6 +1,6 @@
 //! The Bengali dictionary Scribe carries with it.
 //!
-//! 454,649 words, compiled from `words.txt` at
+//! 451,348 words, compiled from `words.txt` at
 //! `github.com/tahmid02016/bangla-wordlist` (Unlicense, public domain) by
 //! `devtools/lexicon-build`. Stored as a finite-state automaton: 3.4 MB
 //! embedded in the binary rather than 11 MB of plain text, with lookup in
@@ -88,7 +88,7 @@ mod tests {
         // so that regenerating the dictionary from a different source, or
         // silently shipping a truncated file, fails here rather than quietly
         // weakening every check that depends on it.
-        assert_eq!(d.len(), 454_649);
+        assert_eq!(d.len(), 451_348);
     }
 
     #[test]

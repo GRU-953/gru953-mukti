@@ -1,0 +1,17 @@
+[package]
+name = "eval"
+description = "Measures GRU953 Scribe's conversion and detection accuracy against real data. Development tool; not shipped."
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+fst = "0.4"
+gru953-scribe = { path = "../../crates/scribe-core" }
+
+[lints]
+workspace = true
