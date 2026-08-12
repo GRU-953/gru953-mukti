@@ -12,8 +12,11 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-# None yet. A compressed dictionary lands here in Phase 1; until then this
-# crate stays dependency-free.
+# The embedded Bengali dictionary, stored as a finite-state automaton.
+# This crate was dependency-free until Phase 1; half a million words is what
+# changed that, and hand-rolling a compressed word set would be worse
+# engineering rather than better. Unlicense/MIT, no transitive dependencies.
+fst = "0.4"
 
 [lints]
 workspace = true

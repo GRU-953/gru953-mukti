@@ -3,5 +3,22 @@
 version = 3
 
 [[package]]
+name = "fst"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ab85b9b05e3978cc9a9cf8fea7f01b494e1a09ed3037e16ba39edc7a29eb61a"
+
+[[package]]
 name = "gru953-scribe"
 version = "0.2.0"
+dependencies = [
+ "fst",
+]
+
+[[package]]
+name = "lexicon-build"
+version = "0.2.0"
+dependencies = [
+ "fst",
+ "gru953-scribe",
+]

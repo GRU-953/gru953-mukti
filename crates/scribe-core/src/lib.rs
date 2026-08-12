@@ -36,6 +36,7 @@
 //! "no character", which is the intended meaning. Output therefore differs from
 //! the reference only where the reference was wrong.
 
+pub mod dictionary;
 pub mod lexicon;
 pub mod roundtrip;
 pub mod tables;
@@ -102,8 +103,10 @@ const fn is_kar(c: char) -> bool {
 ///
 /// The decomposed form still works: its base letter (`ড`, `ঢ`, `য`) is already
 /// in the list above, and the nukta is handled separately in [`rearrange`].
-/// Laid out as the alphabet's own rows and exempt from rustfmt: one letter per
-/// line is 40 lines that nobody can check against a Bengali chart.
+///
+/// Laid out as the alphabet's own rows and exempt from rustfmt, which would
+/// otherwise spread it over 40 lines of one letter each — unreadable, and
+/// impossible to check against a Bengali chart.
 #[rustfmt::skip]
 const fn is_consonant(c: char) -> bool {
     matches!(c,
