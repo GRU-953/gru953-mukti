@@ -38,6 +38,7 @@
 
 pub mod classify;
 pub mod dictionary;
+pub mod encoding;
 pub mod lexicon;
 pub mod roundtrip;
 pub mod tables;

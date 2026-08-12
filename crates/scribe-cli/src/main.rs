@@ -1,0 +1,348 @@
+//! GRU953 Scribe on the command line.
+//!
+//! Converts legacy Bijoy/SutonnyMJ Bangla into Unicode, **word by word**, so
+//! English, numbers and Bengali that is already Unicode come through exactly
+//! as they went in.
+//!
+//! # Two rules this tool will not break
+//!
+//! **It never writes over your file unless you ask it to.** The default is a
+//! new file beside the original. `--in-place` exists and has to be typed.
+//!
+//! **It never claims to have done more than it did.** Every run says how many
+//! words changed, and `check` shows you that without writing anything at all.
+//!
+//! No arguments parser dependency: the options are few and hand-rolled parsing
+//! keeps this crate's dependency list at one entry, the converter itself.
+
+use std::fs;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+
+use gru953_scribe::classify::{classify_words, Verdict};
+use gru953_scribe::convert;
+use gru953_scribe::dictionary::Dictionary;
+use gru953_scribe::encoding::{decode, TextEncoding};
+use gru953_scribe::tokenise::{tokenise, Kind};
+
+const USAGE: &str = "\
+GRU953 Scribe — convert legacy Bangla text to Unicode.
+
+  scribe convert <file>...    convert files, writing a new file beside each one
+  scribe check <file>...      say what would change, and write nothing
+  scribe convert -            read from the keyboard or a pipe, write to screen
+
+Options
+  --in-place        overwrite the original file instead of writing a new one
+  --out <file>      write the result to this file (one input file only)
+  --quiet           print nothing but errors
+  --version         print the version
+  --help            print this
+
+Examples
+  scribe convert report.txt              writes report.unicode.txt
+  scribe check *.txt                     shows what would change, changes nothing
+  cat old.txt | scribe convert -         converts a pipe
+";
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(code) => code,
+        Err(message) => {
+            eprintln!("{message}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<ExitCode, String> {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.is_empty() || args.iter().any(|a| a == "--help" || a == "-h") {
+        print!("{USAGE}");
+        return Ok(ExitCode::SUCCESS);
+    }
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("GRU953 Scribe {}", env!("CARGO_PKG_VERSION"));
+        return Ok(ExitCode::SUCCESS);
+    }
+
+    let mut mode = None;
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut in_place = false;
+    let mut quiet = false;
+    let mut out: Option<PathBuf> = None;
+
+    let mut it = args.into_iter();
+    while let Some(arg) = it.next() {
+        match arg.as_str() {
+            "convert" if mode.is_none() => mode = Some(Mode::Convert),
+            "check" if mode.is_none() => mode = Some(Mode::Check),
+            "--in-place" => in_place = true,
+            "--quiet" | "-q" => quiet = true,
+            "--out" => {
+                out = Some(it.next().map(PathBuf::from).ok_or_else(|| {
+                    "--out needs a file name after it, for example: --out result.txt".to_owned()
+                })?)
+            }
+            other if other.starts_with("--") => {
+                return Err(format!("I do not know the option {other}.\n\n{USAGE}"))
+            }
+            other => files.push(PathBuf::from(other)),
+        }
+    }
+
+    let Some(mode) = mode else {
+        return Err(format!(
+            "Start with either `convert` or `check`.\n\n{USAGE}"
+        ));
+    };
+    if files.is_empty() {
+        return Err(format!(
+            "No files given. Name a file, or use `-` to read from a pipe.\n\n{USAGE}"
+        ));
+    }
+    if out.is_some() && files.len() > 1 {
+        return Err(
+            "--out writes a single file, but several were given.\nConvert them one at a time, or drop --out to write a new file beside each."
+                .to_owned(),
+        );
+    }
+    if in_place && files.iter().any(|f| f.as_os_str() == "-") {
+        return Err("--in-place cannot be used with `-`: a pipe is not a file.".to_owned());
+    }
+
+    let mut any_failed = false;
+    let mut total = Tally::default();
+
+    for path in &files {
+        match handle(path, mode, in_place, out.as_deref(), quiet) {
+            Ok(tally) => total.add(tally),
+            Err(message) => {
+                eprintln!("{message}");
+                any_failed = true;
+            }
+        }
+    }
+
+    if !quiet && files.len() > 1 {
+        println!("\nAcross {} files: {}", files.len(), total.describe(mode));
+    }
+    Ok(if any_failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mode {
+    Convert,
+    Check,
+}
+
+#[derive(Default)]
+struct Tally {
+    converted: usize,
+    untouched: usize,
+}
+
+impl Tally {
+    fn add(&mut self, other: Tally) {
+        self.converted += other.converted;
+        self.untouched += other.untouched;
+    }
+
+    fn describe(&self, mode: Mode) -> String {
+        let verb = match mode {
+            Mode::Convert => "converted",
+            Mode::Check => "would be converted",
+        };
+        format!(
+            "{} of {} words {verb}; {} left exactly as they were.",
+            self.converted,
+            self.converted + self.untouched,
+            self.untouched
+        )
+    }
+}
+
+fn handle(
+    path: &Path,
+    mode: Mode,
+    in_place: bool,
+    out: Option<&Path>,
+    quiet: bool,
+) -> Result<Tally, String> {
+    let from_pipe = path.as_os_str() == "-";
+
+    let bytes = if from_pipe {
+        let mut buf = Vec::new();
+        io::stdin()
+            .read_to_end(&mut buf)
+            .map_err(|e| format!("Could not read from the pipe: {e}"))?;
+        buf
+    } else {
+        fs::read(path).map_err(|e| {
+            format!(
+                "Could not open {}: {e}\nCheck the name is right and that the file is not open in another programme.",
+                path.display()
+            )
+        })?
+    };
+
+    let (text, encoding) = decode(&bytes);
+    let (converted, tally) = convert_and_count(&text);
+
+    match mode {
+        Mode::Check => {
+            if !quiet {
+                let name = if from_pipe {
+                    "(from the pipe)".to_owned()
+                } else {
+                    path.display().to_string()
+                };
+                println!("{name}: {}", tally.describe(mode));
+                if encoding == TextEncoding::Windows1252 {
+                    println!("  Read as Windows-1252, which is normal for a legacy Bangla file.");
+                }
+            }
+        }
+        Mode::Convert if from_pipe => {
+            io::stdout()
+                .write_all(converted.as_bytes())
+                .map_err(|e| format!("Could not write the result: {e}"))?;
+        }
+        Mode::Convert => {
+            let destination = match out {
+                Some(o) => o.to_path_buf(),
+                None if in_place => path.to_path_buf(),
+                None => beside(path),
+            };
+            // Converted text is Bengali, so it is always written as UTF-8 —
+            // the encoding it arrived in cannot hold it.
+            fs::write(&destination, converted.as_bytes()).map_err(|e| {
+                format!(
+                    "Could not write {}: {e}\nCheck you have permission to write to that folder.",
+                    destination.display()
+                )
+            })?;
+            if !quiet {
+                println!("{} -> {}", path.display(), destination.display());
+                println!("  {}", tally.describe(mode));
+                if encoding == TextEncoding::Windows1252 {
+                    println!("  Read as Windows-1252 and written as UTF-8.");
+                }
+            }
+        }
+    }
+    Ok(tally)
+}
+
+/// `report.txt` becomes `report.unicode.txt`.
+///
+/// A new name rather than the original, because overwriting somebody's only
+/// copy of a document on the strength of a guess is not a thing this tool does
+/// without being told to.
+fn beside(path: &Path) -> PathBuf {
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    let name = match path.extension() {
+        Some(ext) => format!("{stem}.unicode.{}", ext.to_string_lossy()),
+        None => format!("{stem}.unicode"),
+    };
+    path.with_file_name(name)
+}
+
+/// Convert, and count what changed, in one pass over the text.
+fn convert_and_count(input: &str) -> (String, Tally) {
+    let dictionary = Dictionary::shipped();
+    let segments = tokenise(input);
+    let words: Vec<&str> = segments
+        .iter()
+        .filter(|s| s.kind == Kind::Word)
+        .map(|s| s.text)
+        .collect();
+    let verdicts = classify_words(&words, dictionary);
+
+    let mut out = String::with_capacity(input.len());
+    let mut tally = Tally::default();
+    let mut w = 0usize;
+    for segment in &segments {
+        match segment.kind {
+            Kind::Gap => out.push_str(segment.text),
+            Kind::Word => {
+                if verdicts[w] == Verdict::Legacy {
+                    out.push_str(&convert(segment.text));
+                    tally.converted += 1;
+                } else {
+                    out.push_str(segment.text);
+                    tally.untouched += 1;
+                }
+                w += 1;
+            }
+        }
+    }
+    (out, tally)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_name_is_chosen_beside_the_original() {
+        assert_eq!(
+            beside(Path::new("report.txt")),
+            Path::new("report.unicode.txt")
+        );
+        assert_eq!(
+            beside(Path::new("/a/b/notes.md")),
+            Path::new("/a/b/notes.unicode.md")
+        );
+        assert_eq!(beside(Path::new("README")), Path::new("README.unicode"));
+    }
+
+    #[test]
+    fn text_with_nothing_legacy_in_it_comes_back_byte_for_byte() {
+        for input in [
+            "Programme operations and budget review for the 2026 cycle.",
+            "সম্পূর্ণ ইউনিকোড বাংলা লেখা",
+            "Region\tTotal\tBalance\nDhaka\t1200\t340\n",
+            "",
+        ] {
+            let (out, tally) = convert_and_count(input);
+            assert_eq!(out, input, "text was altered: {input:?}");
+            assert_eq!(tally.converted, 0);
+        }
+    }
+
+    #[test]
+    fn only_the_legacy_words_change_and_the_count_says_so() {
+        let input = "Report: Kg\u{a9}m~wP for 2026 এবং done\n";
+        let (out, tally) = convert_and_count(input);
+        assert!(
+            out.contains("কর্মসূচি"),
+            "the legacy word was missed: {out:?}"
+        );
+        assert!(out.starts_with("Report:"), "English was altered: {out:?}");
+        assert!(out.ends_with("done\n"), "the ending changed: {out:?}");
+        assert_eq!(tally.converted, 1);
+        assert_eq!(tally.untouched, 5);
+    }
+
+    #[test]
+    fn the_tally_reads_as_plain_english() {
+        let tally = Tally {
+            converted: 3,
+            untouched: 7,
+        };
+        assert_eq!(
+            tally.describe(Mode::Convert),
+            "3 of 10 words converted; 7 left exactly as they were."
+        );
+        assert_eq!(
+            tally.describe(Mode::Check),
+            "3 of 10 words would be converted; 7 left exactly as they were."
+        );
+    }
+}

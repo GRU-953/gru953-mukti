@@ -185,6 +185,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "scribe-cli"
+version = "0.2.0"
+dependencies = [
+ "gru953-scribe",
+]
+
+[[package]]
 name = "simd-adler32"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
