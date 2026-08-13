@@ -220,6 +220,28 @@ question addressed to their owner.
 This is the ordinary way an open-source project separates its code licence from
 its trademarks, and it is stated here rather than left to inference.
 
+**The colour palette is NOT one of the marks, and is deliberately not restricted
+here.** It is a reasonable thing to wonder about, so the boundary is drawn
+explicitly rather than left for a reader to guess:
+
+| Part of the brand | Where it ships | Status |
+|---|---|---|
+| The Soaring Bird, the app-icon tile | `crates/mukti-app/ui/brand/` | **Not licensed.** See above |
+| The name GRU953, the wordmark, any lockup | — | **Not licensed.** See above |
+| The colour palette and the rest of the design tokens | `crates/mukti-app/ui/tokens.css` | **Apache-2.0**, by the brand kit's own choice — see section 7 |
+| The typefaces | `crates/mukti-app/ui/fonts/` | **SIL Open Font Licence 1.1** — see section 8 |
+
+The token file carries that grant in its own header: *"Licensed under the Apache
+License, Version 2.0. The GRU953 marks are NOT licensed."* Two different answers
+in one file, which is exactly why the table above exists. Reproducing the
+palette is permitted under Apache-2.0, with the attribution that licence
+requires. Reproducing the bird is not.
+
+One loose end, recorded rather than hidden: that same header points readers at
+`governance/TRADEMARKS.md`, which lives in the brand kit and **not** in this
+repository. Anyone following the pointer from here finds nothing. This notice is
+the answer they were looking for.
+
 Verified rather than assumed: each font's own embedded licence field (name
 table ID 13) reads "This Font Software is licensed under the SIL Open Font
 License, Version 1.1" and points at https://openfontlicense.org.
