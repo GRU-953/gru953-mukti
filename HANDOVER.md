@@ -51,9 +51,10 @@ not choose a version.
 
 (Two different numbers are easy to confuse here. The pin above is the one
 compiler this project is built and measured with. `rust-version` in `Cargo.toml`
-says **1.82**, which is the oldest compiler the *library* claims to work with —
-a claim nothing currently tests. This document used to say "1.97.1 or newer" as
-though it were a requirement, which contradicted the declared 1.82.)
+says **1.88**, which is the oldest compiler the *library* claims to work with —
+a claim nothing currently tests. It was 1.82 until 14 August 2026, when reading
+the pre-2007 Office formats brought in a dependency needing 1.88; the owner
+agreed to the change rather than have the declared minimum be untrue.)
 
 There is also a project-local build environment, which is the easier route:
 
@@ -74,7 +75,7 @@ Then:
 cargo test --workspace
 ```
 
-105 tests, all passing. Then the command-line tool:
+150 tests, all passing. Then the command-line tool:
 
 ```bash
 cargo run -p mukti-cli -- check <file>
@@ -231,13 +232,15 @@ ones that will bite a newcomer.
 
 In rough order of value:
 
-1. **Open the app and use it.** It builds on all three platforms and the front
-   end was verified in a browser, but **no human has ever opened the window**.
-   Native rendering, the file dialogs and drag-and-drop are unexercised.
-2. **Sample the residue described in §5.** Take 200 converted words that are
-   absent from the dictionary and classify them by hand: name, rare word, or
-   genuine error. Until that is done the true accuracy on real documents is
-   unknown.
+1. ~~Open the app and use it.~~ **Done, 13 August 2026.** The window was inert
+   in 0.4.0 for two independent reasons — a missing configuration flag and a
+   missing permissions file — and both are fixed. The owner drove every control
+   by hand and confirmed it.
+2. ~~Sample the residue.~~ **Done, 13 August 2026.** 200 words drawn with a
+   recorded seed, classified against a scheme written down first, and a second
+   rater with no knowledge of the project classified the same 200 blind. Three
+   genuine mis-conversions in each. Real-document accuracy **99.909%**
+   [99.737, 99.969], or 99.756% counting every unjudgeable case as an error.
 3. **Bangla interface.** All user-facing strings sit in one table in
    [app.js](crates/mukti-app/ui/app.js). This is a translation job, not a
    rebuild.
@@ -246,9 +249,26 @@ In rough order of value:
    dependency order: `gru953-mukti`, then `mukti-formats`, then `mukti-cli`.
 5. **Code signing.** Installers are unsigned, so both macOS and Windows warn on
    first launch. Needs a paid Apple developer account and a Windows certificate.
-6. **PDF layout.** Output is running text. Column and table detection would
-   help; 6 of 60 test PDFs produced nothing usable.
-7. **Old binary Office formats** (`.doc`, `.xls`, `.ppt`) are not supported.
+6. **PDF layout.** Text is now joined into real lines rather than one fragment
+   per positioning instruction, which removed 56% of the line breaks on a
+   sampled set. Headings, columns and tables are **not** recovered, and that is
+   a measured decision rather than an omission: 80 documents were judged against
+   a pre-registered scheme, and of the three that were badly scrambled, all three
+   were **tables**, not columns — so the column detection originally planned
+   would have fixed none of them. Table reconstruction is a larger job and is
+   not started. A converted table may put a figure away from its row; check it
+   against the original.
+7. ~~Old binary Office formats are not supported.~~ **Supported since 14 August
+   2026.** `.doc`, `.xls` and `.ppt` are read and written out as new `.docx`,
+   `.xlsx` and `.pptx` files beside the original, which is never modified. All
+   141 in the archive convert, and every generated document passes the same
+   structural checks Office itself applies. **Text only:** these formats carry no
+   formatting we can keep and no font information, so the conversion is decided
+   from the words alone — plain-text accuracy, not the higher font-gated figure.
+8. **Markdown and HTML output.** Planned, then deferred by the owner in favour of
+   releasing. Measurement showed it could carry bold (declared in the file, so no
+   guessing) and about one line break in eight joined into paragraphs, but not
+   headings — font size does not separate them in this archive.
 
 ## 9. Ground rules worth keeping
 

@@ -100,7 +100,7 @@ Your original is never overwritten unless you type `--in-place`.
 | `.pdf` | **Read-only, best effort.** Text extracted and converted; layout is lost |
 | Older `.doc` `.xls` `.ppt` | Converted into a **new** `.docx`, `.xlsx` or `.pptx` beside the original. **Text only** — these formats hold no formatting we can carry, and no font information, so accuracy matches plain text rather than the higher figure above |
 
-Verified across **every one of 2,316 documents** in a real archive — not a sample.
+Verified across **every one of 2,315 documents** in a real archive — not a sample.
 Word count and whitespace preserved, every archive entry intact, no legacy font left
 behind, and converting an already-converted file changes nothing further. That last
 one matters most: a converter that mangles its own output looks perfectly correct on
@@ -268,7 +268,7 @@ rules, and two dictionaries built into the binary: 451,348 Bangla words and
 ## Build it yourself
 
 ```sh
-cargo test --workspace     # 105 tests, no network needed
+cargo test --workspace     # 150 tests, no network needed
 cargo run -p mukti-app    # the desktop app
 cargo run -p mukti-cli    # the command-line tool
 ```

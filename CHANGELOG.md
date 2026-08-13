@@ -1,6 +1,60 @@
 # Changelog
 
-## Unreleased
+## Unreleased — becomes 0.5.0
+
+### New
+
+- **The older Office formats are read.** `.doc`, `.xls` and `.ppt` are converted
+  into new `.docx`, `.xlsx` and `.pptx` files beside the original, which is never
+  modified. All 141 in the test archive convert, and every generated document
+  passes the same structural checks Office applies before it will open a file.
+  PowerPoint keeps its real slide breaks and titles.
+  **Text only.** These formats carry no formatting we can keep and no font
+  information, so the conversion is decided from the words alone — the same
+  accuracy as a plain text file, not the higher figure quoted for `.docx`. The
+  app and the command-line tool both say so.
+- **`--force`**, so the tool can be told it may replace a file it named itself.
+
+### Fixed
+
+- **PDF text no longer arrives in fragments.** A line break was emitted at every
+  positioning instruction, so a word split for kerning came out on three lines:
+  `Md. Al`, `-`, `Hasan`. Breaks now happen only where the text moves down the
+  page. Measured across 40 documents: 62,389 lines became 27,726, and none got
+  worse. The threshold comes from the data — across 385,372 consecutive runs the
+  vertical step is sharply bimodal, with only 0.25% falling between the two modes.
+- **The promise about not overwriting files now holds.** The tool said it never
+  writes over your file unless asked. That was true of the original and false of
+  everything else: the derived `.unicode.txt` sibling and any `--out` target were
+  truncated silently. A name the tool chose is now refused if something is
+  already there.
+- **Word-processor curly quotes could turn English into Bengali.** In the
+  document-level converter, `as “Village planting”` became Bengali-shaped
+  nonsense while the straight-quoted form was correctly left alone. **No shipped
+  path called that function**, so no released version was affected — this is
+  recorded because the fault was real, not because anyone met it.
+- **Four legacy font variants were being missed** — `SutonnyBanglaMJ`,
+  `SutonnyBanglaMJBold`, `SutonnyUniBanglaOMJ` and `SutonnySushreeMJ` — because
+  the font lists named three exact spellings and matched by substring. Both
+  lists now match on the family.
+- **A self-closing `<w:t/>` confused the Office rewriter's first pass** into
+  believing a text element was open that would never close. It could not corrupt
+  anything, for a reason now written down, and is fixed rather than relied upon.
+- **Converting an old `.doc` twice could change it twice.** The document written
+  from one is now settled through the ordinary Office converter before it is
+  returned, so it cannot be improved by converting it again.
+
+### Changed
+
+- **The minimum Rust version is now 1.88**, up from 1.82, which is what reading
+  the older Office formats requires.
+- **The archive check now covers the old formats** instead of skipping them, by
+  handing each converted document to the full Office check. 2,315 files, 0
+  defects. That change immediately found the double-conversion fault above.
+- **One place now decides what a legacy word is**, instead of four copies of the
+  same loop in the core, the formats crate, the tool and the app.
+- **An unsoundness advisory can no longer pass the release gate unnamed.**
+
 
 ### Known faults in 0.4.0, being fixed
 
