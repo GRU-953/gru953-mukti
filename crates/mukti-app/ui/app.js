@@ -17,8 +17,54 @@
 //   3. No file path is ever sent to Rust. Rust owns the dialogs, so there is no
 //      path parameter to get wrong.
 
-const invoke = window.__TAURI__.core.invoke;
-const listen = window.__TAURI__.event.listen;
+// The bridge to Rust.
+//
+// Read through a check rather than reached for directly, and the reason is the
+// whole of what went wrong in 0.4.0. That version began:
+//
+//     const invoke = window.__TAURI__.core.invoke;
+//
+// `window.__TAURI__` did not exist, because one setting in tauri.conf.json was
+// never switched on. So this line threw, the whole script stopped, and not one
+// event listener was ever attached. The window opened, rendered perfectly, and
+// every single control was dead — with nothing printed anywhere a person would
+// look, and no test that could tell.
+//
+// Two things now prevent that. `frontend_contract.rs` fails the build if the
+// setting is missing. And if it somehow still is, this says so ON SCREEN instead
+// of dying quietly, because a fault a user can see gets reported, and a silent one
+// ships.
+function bridge() {
+  const api = window.__TAURI__;
+  if (api && api.core && api.event) return api;
+
+  document.body.innerHTML = "";
+  const panel = document.createElement("div");
+  panel.setAttribute("role", "alert");
+  panel.style.cssText =
+    "margin:2rem;padding:1.5rem;max-width:60ch;font:16px/1.6 system-ui," +
+    "sans-serif;border:2px solid #CE393A;border-radius:14px;color:#0B0E14;" +
+    "background:#FFF0EE";
+  const title = document.createElement("h1");
+  title.style.cssText = "margin:0 0 .5rem;font-size:1.25rem;color:#A71F25";
+  title.textContent = "This copy of Mukti was built incorrectly";
+  const body = document.createElement("p");
+  body.style.cssText = "margin:0";
+  body.textContent =
+    "The window cannot reach the converter, so nothing in it would work. This is " +
+    "a fault in the build, not in anything you did, and no version of Mukti should " +
+    "ever reach you in this state. Please report it, and use the command-line tool " +
+    "in the meantime: mukti convert yourfile.docx";
+  panel.append(title, body);
+  document.body.append(panel);
+  throw new Error(
+    "window.__TAURI__ is missing: app.withGlobalTauri is not enabled in tauri.conf.json"
+  );
+}
+
+const api = bridge();
+const invoke = api.core.invoke;
+const listen = api.event.listen;
 
 // Every string a person reads, in one place.
 //

@@ -1,0 +1,59 @@
+# Keep the dependencies moving, deliberately.
+#
+# This exists because of what happened on 13 August 2026. The licence and
+# security audit for v0.4.0 was careful and correct on the day it ran, and four
+# days later it was three published vulnerabilities out of date — all three in the
+# code that opens a file somebody else gave you. Nothing would have said so.
+#
+# Pinning every action by commit SHA (which this project now does) removes one
+# risk and creates another: a pin never updates itself, so a pinned action with a
+# fix in it stays unfixed. Dependabot is the other half of that decision. It
+# raises a pull request naming the change, and a person decides.
+
+version: 2
+updates:
+  # GitHub Actions. Every `uses:` in this repository is pinned to a commit, and
+  # Dependabot understands those: it bumps the SHA and updates the `# v4` comment
+  # beside it, so the pin stays honest instead of stale.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
+
+  # Rust dependencies. Grouped, because the Tauri tree is large and a separate
+  # pull request per crate would bury the ones that matter.
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+    groups:
+      # Tauri and its plugins move together; splitting them produces pull
+      # requests that cannot build on their own.
+      tauri:
+        patterns:
+          - "tauri"
+          - "tauri-*"
+      # Everything that reads a file somebody else supplied. These are the
+      # dependencies where a missed update is a security problem rather than an
+      # inconvenience, so they are grouped to be seen together and reviewed
+      # first — `lopdf` and `quick-xml` are the two that were already caught out.
+      file-parsers:
+        patterns:
+          - "lopdf"
+          - "quick-xml"
+          - "zip"
+      rest:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "tauri"
+          - "tauri-*"
+          - "lopdf"
+          - "quick-xml"
+          - "zip"

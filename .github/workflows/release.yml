@@ -49,15 +49,33 @@ jobs:
             target: x86_64-pc-windows-msvc
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          # A universal build is assembled from both real targets, and
-          # `universal-apple-darwin` is not itself something rustup installs.
-          targets: ${{ matrix.extra-targets || matrix.target }}
+      # The compiler comes from rust-toolchain.toml, and from nowhere else.
+      #
+      # No toolchain action here, deliberately. Any action needs the version as an
+      # input, which would put the number in two files and invite them to drift -
+      # and CI installing "whatever stable is today" is exactly the unpinned
+      # behaviour rust-toolchain.toml exists to end. `rustup toolchain install`
+      # with no argument reads that file, including its components list, so this
+      # step has no version in it at all.
+      - name: Install the pinned toolchain
+        shell: bash
+        run: |
+          rustup toolchain install
+          rustc --version
+          cargo --version
 
-      - uses: Swatinem/rust-cache@v2
+      # A universal build is assembled from both real Apple targets;
+      # `universal-apple-darwin` is not itself something rustup installs.
+      - name: Add the build targets
+        shell: bash
+        run: |
+          IFS=',' read -ra targets <<< "${{ matrix.extra-targets || matrix.target }}"
+          for t in "${targets[@]}"; do rustup target add "$t"; done
+          rustup target list --installed
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
       # Ubuntu 22.04 rather than latest: the webkit2gtk package name changed,
       # and pinning it here means a release does not break the day the runner
@@ -98,7 +116,7 @@ jobs:
           fi
 
       - name: Build the app installer
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         with:
           projectPath: crates/mukti-app
           args: --target ${{ matrix.target }}
@@ -106,24 +124,67 @@ jobs:
       - name: Collect what was built
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p out
+
           # The command-line tool, under a name that says which machine it is for.
-          for f in target/universal-apple-darwin/release/mukti \
-                   target/release/mukti target/release/mukti.exe; do
-            [ -f "$f" ] && cp "$f" "out/mukti-${{ matrix.target }}${f##*mukti}"
-          done
+          #
+          # ONE named source per platform, not a loop over candidates. The loop
+          # this replaces built its destination with ${f##*mukti}, which is empty
+          # for BOTH `target/universal-apple-darwin/release/mukti` and
+          # `target/release/mukti` — so on macOS the second silently overwrote the
+          # first with a single-architecture binary. It had not bitten yet only
+          # because `cargo test` does not emit `target/release/mukti` while there
+          # is no tests/ directory in the workspace. Adding one would have broken
+          # the macOS release, and a tests/ directory is exactly what comes next.
+          #
+          # Fixed by naming the file we mean instead of guessing among three.
+          case "${{ runner.os }}" in
+            macOS)
+              cp target/universal-apple-darwin/release/mukti \
+                 "out/mukti-${{ matrix.target }}"
+              ;;
+            Windows)
+              cp target/release/mukti.exe "out/mukti-${{ matrix.target }}.exe"
+              ;;
+            *)
+              cp target/release/mukti "out/mukti-${{ matrix.target }}"
+              ;;
+          esac
+
           # Prove the claim in the file name rather than asserting it.
           if [ "${{ runner.os }}" = "macOS" ]; then
-            lipo -archs out/mukti-universal-apple-darwin | grep -q "x86_64 arm64" \
+            lipo -archs "out/mukti-${{ matrix.target }}" | grep -q "x86_64 arm64" \
               || { echo "the universal binary is not universal"; exit 1; }
           fi
+
           # Installers, wherever this platform's bundler put them.
+          #
+          # .rpm is included: bundle.targets is "all", so Linux builds one, and it
+          # was being built and then silently dropped.
+          #
+          # And no `|| true` on the end. That swallowed a total failure to find any
+          # installer at all — and `if-no-files-found: error` on the upload would
+          # still have passed, because the command-line binary was in out/. So a
+          # release with no installers in it could look completely green.
           find target -path '*/release/bundle/*' \
-            \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' -o -name '*.AppImage' \) \
-            -exec cp {} out/ \; 2>/dev/null || true
+            \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' \
+               -o -name '*.AppImage' -o -name '*.rpm' \) \
+            -exec cp {} out/ \;
+
+          # Say what an installer actually is on this platform, and fail if none
+          # arrived. Counting is the check; listing is for a human reading the log.
+          installers=$(find out -type f \
+            \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' \
+               -o -name '*.AppImage' -o -name '*.rpm' \) | wc -l | tr -d ' ')
+          if [ "$installers" -eq 0 ]; then
+            echo "no installer was produced for ${{ matrix.target }}"
+            exit 1
+          fi
+          echo "$installers installer(s) for ${{ matrix.target }}:"
           ls -la out
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: gru953-mukti-${{ matrix.target }}
           path: out/*
@@ -135,11 +196,11 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: all
       - name: Draft the release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: all/**/*
           # A draft, never a live release. Publishing is a decision a person
