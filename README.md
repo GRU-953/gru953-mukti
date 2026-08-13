@@ -48,13 +48,11 @@ Works completely offline. No account, no upload, no network.
 > mukti convert yourfile.docx
 > ```
 >
-> **Also being corrected:** one accuracy figure for real documents has been
-> withdrawn as not meaning what it appeared to — see [Accuracy](#accuracy).
->
-> **Also being improved:** the window's accessibility. Every text colour meets the
-> WCAG 2.2 AA contrast requirement, but the borders around the text boxes and most
-> buttons do not — they are too faint against their background. Being fixed
-> alongside the window itself.
+> **Both are fixed in the source and awaiting release**, along with the window
+> being rebuilt on the GRU953 brand properly, its accessibility corrected (the
+> borders on the text boxes and buttons were too faint to meet the contrast
+> requirement), and Word, Excel, PowerPoint and PDF finally working *in the window*
+> rather than only from the command line.
 
 ---
 
@@ -102,9 +100,15 @@ Your original is never overwritten unless you type `--in-place`.
 | `.pdf` | **Read-only, best effort.** Text extracted and converted; layout is lost |
 | Older `.doc` `.xls` `.ppt` | Not supported — save as the newer format first |
 
-Verified across 300 randomly chosen documents from a real archive: word count
-preserved on all 300, whitespace identical on all 300, every archive entry
-intact, no legacy font left behind.
+Verified across **every one of 2,316 documents** in a real archive — not a sample.
+Word count and whitespace preserved, every archive entry intact, no legacy font left
+behind, and converting an already-converted file changes nothing further. That last
+one matters most: a converter that mangles its own output looks perfectly correct on
+a single pass.
+
+Checking all of them rather than 300 found four faults a sample had missed,
+including one that moved text between runs in documents containing no legacy Bangla
+at all. Re-run it yourself with `cargo run --release -p corpus-verify -- <folder>`.
 
 ## Accuracy
 
@@ -174,8 +178,11 @@ at, as are runs whose declared font contradicts their own bytes.
 
 **Accuracy on real documents: about 99.9%, and here is how that is known.**
 
-The direct measurement is that **94.015%** of converted words, over real
-documents, are found in the dictionary (177,071 words). That is a **floor**, not an
+The direct measurement is that **94.023%** of converted words, over real
+documents, are found in the dictionary (177,071 words). It was 94.015% until
+14 August 2026, when a fault found by this very study — a lost halant where a
+consonant carries both a reph and a conjunct — was fixed, and one more word began
+converting correctly. That is a **floor**, not an
 accuracy: names, places, acronyms and rare words are in no word list, so a
 perfectly converted word can be missing from one. Earlier versions of this page
 reported 78.4%, which was simply wrong — it came from a superseded answer key.
