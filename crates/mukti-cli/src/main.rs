@@ -20,11 +20,8 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use gru953_mukti::classify::{classify_words, Verdict};
-use gru953_mukti::convert;
-use gru953_mukti::dictionary::Dictionary;
+use gru953_mukti::classify::{convert_pieces, count};
 use gru953_mukti::encoding::{decode, TextEncoding};
-use gru953_mukti::tokenise::{tokenise, Kind};
 use mukti_formats::{
     convert_legacy_office, convert_office, convert_pdf_to_text, LegacyFormat,
     PLAIN_TEXT_ONLY_NOTICE,
@@ -506,34 +503,15 @@ fn beside(path: &Path) -> PathBuf {
 
 /// Convert, and count what changed, in one pass over the text.
 fn convert_and_count(input: &str) -> (String, Tally) {
-    let dictionary = Dictionary::shipped();
-    let segments = tokenise(input);
-    let words: Vec<&str> = segments
-        .iter()
-        .filter(|s| s.kind == Kind::Word)
-        .map(|s| s.text)
-        .collect();
-    let verdicts = classify_words(&words, dictionary);
-
-    let mut out = String::with_capacity(input.len());
-    let mut tally = Tally::default();
-    let mut w = 0usize;
-    for segment in &segments {
-        match segment.kind {
-            Kind::Gap => out.push_str(segment.text),
-            Kind::Word => {
-                if verdicts[w] == Verdict::Legacy {
-                    out.push_str(&convert(segment.text));
-                    tally.converted += 1;
-                } else {
-                    out.push_str(segment.text);
-                    tally.untouched += 1;
-                }
-                w += 1;
-            }
-        }
-    }
-    (out, tally)
+    let pieces = convert_pieces(input);
+    let (converted, untouched) = count(&pieces);
+    (
+        pieces.into_iter().map(|p| p.text).collect(),
+        Tally {
+            converted,
+            untouched,
+        },
+    )
 }
 
 #[cfg(test)]

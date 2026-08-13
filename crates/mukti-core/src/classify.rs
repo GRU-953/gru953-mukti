@@ -339,7 +339,30 @@ pub fn classify_words(words: &[&str], dictionary: &Dictionary) -> Vec<Verdict> {
 ///
 /// Every other byte — words left alone, spaces, tabs, line endings — is
 /// reproduced exactly.
-pub fn convert_words(input: &str) -> String {
+/// One piece of a converted document, and whether the converter changed it.
+///
+/// Gaps — spaces, punctuation, line breaks — are pieces too, and never changed.
+/// Keeping them means the pieces can be joined back into the original document
+/// exactly, and lets an interface show precisely which words were touched.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Piece {
+    pub text: String,
+    pub changed: bool,
+    /// Whether this piece was a word at all. Gaps are pieces too, and counting
+    /// them as untouched words would inflate every total this project prints.
+    pub word: bool,
+}
+
+/// Convert every legacy word in the text, and say which ones changed.
+///
+/// **The one place this decision is made.** Until 14 August 2026 this loop was
+/// written out four times — here, in `mukti_formats::convert_text_with_summary`,
+/// in the command-line tool's `convert_and_count` and in the app's
+/// `convert_str`. Four copies of a judgement is four chances for the tool and
+/// the window to disagree about the same file, and every accuracy figure this
+/// project publishes is a claim about *one* judgement. Everything else now
+/// counts or joins these pieces; nothing else decides.
+pub fn convert_pieces(input: &str) -> Vec<Piece> {
     let dictionary = Dictionary::shipped();
     let segments: Vec<Segment> = tokenise(input);
     let words: Vec<&str> = segments
@@ -349,22 +372,42 @@ pub fn convert_words(input: &str) -> String {
         .collect();
     let verdicts = classify_words(&words, dictionary);
 
-    let mut out = String::with_capacity(input.len());
+    let mut pieces = Vec::with_capacity(segments.len());
     let mut w = 0usize;
     for segment in &segments {
         match segment.kind {
-            Kind::Gap => out.push_str(segment.text),
+            Kind::Gap => pieces.push(Piece {
+                text: segment.text.to_owned(),
+                changed: false,
+                word: false,
+            }),
             Kind::Word => {
-                if verdicts[w] == Verdict::Legacy {
-                    out.push_str(&convert(segment.text));
-                } else {
-                    out.push_str(segment.text);
-                }
+                let changed = verdicts[w] == Verdict::Legacy;
+                pieces.push(Piece {
+                    text: if changed {
+                        convert(segment.text)
+                    } else {
+                        segment.text.to_owned()
+                    },
+                    changed,
+                    word: true,
+                });
                 w += 1;
             }
         }
     }
-    out
+    pieces
+}
+
+/// How many words changed, and how many were left alone.
+pub fn count(pieces: &[Piece]) -> (usize, usize) {
+    let converted = pieces.iter().filter(|p| p.changed).count();
+    let untouched = pieces.iter().filter(|p| p.word && !p.changed).count();
+    (converted, untouched)
+}
+
+pub fn convert_words(input: &str) -> String {
+    convert_pieces(input).into_iter().map(|p| p.text).collect()
 }
 
 #[cfg(test)]

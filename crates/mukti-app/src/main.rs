@@ -37,11 +37,8 @@
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use gru953_mukti::classify::{classify_words, Verdict};
-use gru953_mukti::convert;
-use gru953_mukti::dictionary::Dictionary;
+use gru953_mukti::classify::{convert_pieces, count};
 use gru953_mukti::encoding::{decode, TextEncoding};
-use gru953_mukti::tokenise::{tokenise, Kind};
 use serde::Serialize;
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::DialogExt;
@@ -122,44 +119,16 @@ struct State {
 }
 
 fn convert_str(input: &str, encoding: Option<String>) -> Conversion {
-    let dictionary = Dictionary::shipped();
-    let segments = tokenise(input);
-    let words: Vec<&str> = segments
-        .iter()
-        .filter(|s| s.kind == Kind::Word)
-        .map(|s| s.text)
+    let judged = convert_pieces(input);
+    let (converted, untouched) = count(&judged);
+    let text: String = judged.iter().map(|p| p.text.as_str()).collect();
+    let pieces = judged
+        .into_iter()
+        .map(|p| Piece {
+            text: p.text,
+            changed: p.changed,
+        })
         .collect();
-    let verdicts = classify_words(&words, dictionary);
-
-    let mut pieces = Vec::with_capacity(segments.len());
-    let mut text = String::with_capacity(input.len());
-    let (mut converted, mut untouched) = (0usize, 0usize);
-    let mut w = 0usize;
-
-    for segment in &segments {
-        match segment.kind {
-            Kind::Gap => {
-                text.push_str(segment.text);
-                pieces.push(Piece {
-                    text: segment.text.to_owned(),
-                    changed: false,
-                });
-            }
-            Kind::Word => {
-                let changed = verdicts[w] == Verdict::Legacy;
-                let out = if changed {
-                    converted += 1;
-                    convert(segment.text)
-                } else {
-                    untouched += 1;
-                    segment.text.to_owned()
-                };
-                text.push_str(&out);
-                pieces.push(Piece { text: out, changed });
-                w += 1;
-            }
-        }
-    }
 
     Conversion {
         pieces,
