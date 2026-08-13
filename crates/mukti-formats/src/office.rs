@@ -427,6 +427,24 @@ fn collect_runs(xml: &str, out: &mut Vec<Run>) -> Result<(), Box<dyn std::error:
     loop {
         match reader.read_event()? {
             Event::Eof => break,
+            // A text element opens on `Start` only. `<w:t/>` is legal, has no
+            // content, and pass two has always treated it that way — this arm
+            // used to accept `Empty` as well, so pass one believed it was inside
+            // a `<w:t>` that would never end.
+            //
+            // It never corrupted anything, and the reason is worth writing down
+            // because it is not obvious: the stale flag let the indentation
+            // between tags accumulate, but the next `<w:t>` clears the buffer
+            // before any `</w:t>` can push it, and in well-formed XML an End
+            // cannot arrive without its Start. The wrong state was real and
+            // unobservable. It is fixed rather than relied upon — the position
+            // tracking below is documented as fatal if it drifts by one
+            // character, and "a second mechanism happens to hide it" is not a
+            // guarantee.
+            Event::Start(e) if is_text_element(e.name().as_ref()) => {
+                in_text = true;
+                text.clear();
+            }
             Event::Start(e) | Event::Empty(e) => match local_name(e.name().as_ref()) {
                 // A new run: whatever font the previous one declared is gone.
                 b"r" => {
@@ -454,10 +472,6 @@ fn collect_runs(xml: &str, out: &mut Vec<Run>) -> Result<(), Box<dyn std::error:
                             }
                         }
                     }
-                }
-                _ if is_text_element(e.name().as_ref()) => {
-                    in_text = true;
-                    text.clear();
                 }
                 _ => {}
             },
@@ -1063,6 +1077,38 @@ fn span(pieces: &[Placed], from: usize, to: usize) -> String {
 #[cfg(test)]
 mod rewrite_tests {
     use super::*;
+
+    #[test]
+    fn a_self_closing_text_element_does_not_swallow_what_follows() {
+        // `<w:t/>` is legal and Word writes it. It has no content, so it must
+        // not open a text element — but pass one matched `Start | Empty` while
+        // pass two matched only `Start`. Pass one therefore believed it was
+        // inside a `<w:t>` that would never end, and everything the reader
+        // handed it afterwards was appended to that run.
+        //
+        // The document below is indented, which is how a great many tools write
+        // `document.xml`. That indentation is `Event::Text`, so it lands inside
+        // the run that never closed — and the two passes then disagree about
+        // what the text is, in the position tracking this file documents as
+        // fatal if it drifts by a single character.
+        let xml = concat!(
+            "<w:document xmlns:w=\"x\">\n",
+            "  <w:body>\n",
+            "    <w:p>\n",
+            "      <w:r><w:t/></w:r>\n",
+            "      <w:r><w:t>Hello</w:t></w:r>\n",
+            "    </w:p>\n",
+            "  </w:body>\n",
+            "</w:document>"
+        );
+        let found = runs(Cursor::new(build_docx(xml))).unwrap();
+        let seen: Vec<&str> = found.iter().map(|r| r.text.as_str()).collect();
+        assert_eq!(
+            seen,
+            vec!["Hello", "\n"],
+            "a self-closing text element changed what the reader saw"
+        );
+    }
 
     /// The smallest thing Word will call a document, plus an image so there is
     /// something non-text to prove is copied through untouched.
