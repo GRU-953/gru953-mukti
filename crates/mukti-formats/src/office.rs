@@ -17,6 +17,59 @@ use std::io::{Read, Seek};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
+/// The literal text of a `Text` event.
+///
+/// From quick-xml 0.41 a `Text` event carries **no** entity references: `&amp;`
+/// and `&#65;` arrive separately as [`Event::GeneralRef`], handled by
+/// [`event_ref`]. So decoding bytes to characters is the whole job here.
+///
+/// The error is propagated rather than swallowed with `unwrap_or_default()`.
+/// That matters more than it looks: an empty string in place of real text does
+/// not merely lose a word, it shifts every character position after it, and the
+/// two passes in `rewrite_part` anchor on those positions. Silence here is how a
+/// document gets quietly corrupted instead of loudly refused.
+fn event_text(e: &quick_xml::events::BytesText<'_>) -> Result<String, Box<dyn std::error::Error>> {
+    Ok(e.decode()?.into_owned())
+}
+
+/// The text a `&…;` reference stands for.
+///
+/// quick-xml 0.41 split entity and character references out of `Text` into their
+/// own event. That change is silent and dangerous: code written for 0.37 still
+/// compiles, still passes a build, and simply **drops** every `&`, `<` and `>`
+/// in the document — while shifting all following character positions, so the
+/// damage spreads well past the ampersand itself. The test
+/// `escaped_characters_come_back_unescaped` is what caught it.
+///
+/// Two kinds resolve:
+///
+/// * character references — `&#38;`, `&#x26;` — via `resolve_char_ref`;
+/// * the five predefined names — `amp`, `lt`, `gt`, `quot`, `apos`.
+///
+/// Anything else is an entity declared in a document type definition, and this
+/// **refuses** rather than guesses. Two reasons. Office documents are not
+/// allowed to carry a document type definition at all, so one appearing means
+/// the file is either malformed or probing for a parser that will follow it —
+/// the classic way to make an XML reader fetch a file it should not. And a
+/// dropped or invented entity would corrupt the text silently, which is the one
+/// outcome this project treats as worse than failing.
+fn event_ref(e: &quick_xml::events::BytesRef<'_>) -> Result<String, Box<dyn std::error::Error>> {
+    if let Some(c) = e.resolve_char_ref()? {
+        return Ok(c.to_string());
+    }
+    let name = e.decode()?;
+    match quick_xml::escape::resolve_xml_entity(&name) {
+        Some(text) => Ok(text.to_owned()),
+        None => Err(format!(
+            "this file refers to \"&{name};\", which is defined in the file's own \
+             document type definition rather than by XML itself. Office files do \
+             not use those, so this one is either damaged or not what it claims \
+             to be. It has been left completely unchanged."
+        )
+        .into()),
+    }
+}
+
 /// One run of text, together with the font it explicitly asked for.
 pub struct Run {
     pub text: String,
@@ -169,7 +222,7 @@ pub fn runs<R: Read + Seek>(archive: R) -> Result<Vec<Run>, Box<dyn std::error::
     Ok(out)
 }
 
-fn collect_runs(xml: &str, out: &mut Vec<Run>) -> Result<(), quick_xml::Error> {
+fn collect_runs(xml: &str, out: &mut Vec<Run>) -> Result<(), Box<dyn std::error::Error>> {
     let mut reader = Reader::from_str(xml);
     let config = reader.config_mut();
     // Word writes `<w:t xml:space="preserve"> </w:t>` for a single space, and
@@ -198,7 +251,11 @@ fn collect_runs(xml: &str, out: &mut Vec<Run>) -> Result<(), quick_xml::Error> {
                             local_name(attr.key.as_ref()),
                             b"ascii" | b"hAnsi" | b"cs" | b"typeface" | b"val"
                         ) {
-                            if let Ok(v) = attr.unescape_value() {
+                            // `normalized_value(Implicit1_0)` is precisely what
+                            // the removed `unescape_value()` did — quick-xml's
+                            // own deprecated body forwarded to exactly this.
+                            if let Ok(v) = attr.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                            {
                                 if !v.is_empty() {
                                     font = Some(v.into_owned());
                                     break;
@@ -214,7 +271,12 @@ fn collect_runs(xml: &str, out: &mut Vec<Run>) -> Result<(), quick_xml::Error> {
                 _ => {}
             },
             Event::Text(e) if in_text => {
-                text.push_str(&e.unescape().unwrap_or_default());
+                text.push_str(&event_text(&e)?);
+            }
+            // `&amp;` and `&#65;` arrive here, not in the Text event above.
+            // Pass two has the matching arm; they must stay in step.
+            Event::GeneralRef(e) if in_text => {
+                text.push_str(&event_ref(&e)?);
             }
             // A paragraph, table cell or slide line ends the word that was in
             // progress. Without this the last word of one paragraph and the
@@ -497,7 +559,15 @@ fn rewrite_part(
                 writer.write_event(XmlEvent::Start(e))?;
             }
             XmlEvent::Text(e) if in_text => {
-                original.push_str(&e.unescape().unwrap_or_default());
+                original.push_str(&event_text(&e)?);
+            }
+            // The matching arm to pass one's. Buffered, not written: the whole
+            // run is re-emitted at the closing tag via `BytesText::new`, which
+            // escapes, so a `&` resolved here becomes `&amp;` again on the way
+            // out. A reference OUTSIDE a text element falls to the catch-all and
+            // is written through untouched.
+            XmlEvent::GeneralRef(e) if in_text => {
+                original.push_str(&event_ref(&e)?);
             }
             XmlEvent::End(e) if is_text_element(e.name().as_ref()) => {
                 if !original.is_empty() {
@@ -566,7 +636,9 @@ fn rename_legacy_font<'a>(
     let mut changed = false;
     for attr in attrs {
         let key = std::str::from_utf8(attr.key.as_ref())?.to_owned();
-        let value = attr.unescape_value().unwrap_or_default();
+        let value = attr
+            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+            .unwrap_or_default();
         if is_legacy_font(&value) {
             changed = true;
             rebuilt.push_attribute((key.as_str(), unicode_font));
@@ -712,6 +784,90 @@ mod rewrite_tests {
             "the English was altered: {xml}"
         );
         assert_eq!(summary.words_converted, 1);
+    }
+
+    /// An ampersand and an angle bracket sit **before** the Bangla on purpose.
+    ///
+    /// `&amp;` is five characters in the file and one on the page. If the two
+    /// passes of `rewrite_part` disagree about which, every position after it
+    /// shifts — and the Bangla, being downstream, is what visibly breaks. So this
+    /// is not really a test about ampersands. It is a test that the two passes
+    /// still count the same characters, using the cheapest available way to make
+    /// them disagree.
+    ///
+    /// It exists because upgrading quick-xml 0.37 → 0.41 moved entity references
+    /// out of the `Text` event into an event of their own. The old code still
+    /// compiled and still built cleanly; it simply dropped every `&`, `<` and `>`
+    /// and shifted everything after them.
+    #[test]
+    fn entities_before_bangla_do_not_shift_the_conversion() {
+        const WITH_ENTITIES: &str = concat!(
+            "<w:document><w:body><w:p>",
+            "<w:r><w:t>Q1 &amp; Q2 &lt;draft&gt;</w:t></w:r>",
+            "<w:r><w:t xml:space=\"preserve\"> </w:t></w:r>",
+            "<w:r><w:rPr><w:rFonts w:ascii=\"SutonnyMJ\"/></w:rPr>",
+            "<w:t>Kg\u{a9}m~wP</w:t></w:r>",
+            "</w:p></w:body></w:document>"
+        );
+
+        let (out, summary) = convert_office(&build_docx(WITH_ENTITIES), "Nirmala UI").unwrap();
+        let xml = document_text(&out);
+
+        // The Bangla still converts, which is only possible if the character
+        // positions survived the entities in front of it.
+        assert!(
+            xml.contains("কর্মসূচি"),
+            "the Bangla after the entities did not convert — positions drifted: {xml}"
+        );
+        assert_eq!(summary.words_converted, 1);
+
+        // The English is byte-for-byte what it was, once entities are resolved.
+        //
+        // The trailing newline is not incidental — pass one appends one for the
+        // paragraph end, and pass two must step over it. It is spelled out here
+        // rather than trimmed away, because that newline is exactly the sort of
+        // invisible character whose accounting the two passes have to agree on.
+        assert_eq!(
+            visible(&out),
+            "Q1 & Q2 <draft> কর্মসূচি\n",
+            "the escaped characters were lost or altered"
+        );
+
+        // And they went back out escaped, so the file is still valid XML rather
+        // than a document with a bare ampersand in it.
+        assert!(
+            xml.contains("&amp;") && xml.contains("&lt;") && xml.contains("&gt;"),
+            "the entities were not re-escaped on the way out: {xml}"
+        );
+    }
+
+    /// A reference this tool cannot resolve must stop the conversion, not be
+    /// quietly dropped.
+    ///
+    /// Office files are not permitted to declare their own entities, so one
+    /// appearing means the file is damaged or is probing for a parser that will
+    /// go and fetch something. Either way, guessing would corrupt the text and
+    /// dropping it would corrupt every position after it. Refusing leaves the
+    /// user's original untouched, which is the only safe answer.
+    #[test]
+    fn an_entity_we_cannot_resolve_is_refused_rather_than_dropped() {
+        const CUSTOM_ENTITY: &str = concat!(
+            "<w:document><w:body><w:p>",
+            "<w:r><w:t>before &mystery; after</w:t></w:r>",
+            "</w:p></w:body></w:document>"
+        );
+
+        let result = convert_office(&build_docx(CUSTOM_ENTITY), "Nirmala UI");
+        assert!(
+            result.is_err(),
+            "an unresolvable entity produced a document instead of an error"
+        );
+        let message = result.unwrap_err().to_string();
+        assert!(
+            message.contains("mystery"),
+            "the error should name the reference it could not resolve, so the user \
+             knows what is wrong with their file; got: {message}"
+        );
     }
 
     #[test]

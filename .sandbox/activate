@@ -1,0 +1,86 @@
+# GRU953 Mukti — build environment.
+#
+# Use it like this, from the project folder:
+#
+#     source .sandbox/activate
+#
+# That is the only setup step. Everything the project needs to build lives
+# inside this folder, so nothing here can disturb the rest of your Mac and
+# nothing on your Mac can quietly change what this project builds with.
+#
+# To undo it, close the terminal window, or run: deactivate_mukti
+#
+# This file is a shell script, not a program to run directly — "source" makes it
+# change the current terminal rather than a throwaway child one.
+
+# Where this file lives, however it was called.
+_MUKTI_SANDBOX="$( cd "$( dirname "${BASH_SOURCE[0]:-${(%):-%x}}" )" && pwd )"
+_MUKTI_ROOT="$( dirname "$_MUKTI_SANDBOX" )"
+
+# Remember what to put back.
+if [ -z "${_MUKTI_ACTIVE:-}" ]; then
+    _MUKTI_OLD_PATH="$PATH"
+    _MUKTI_OLD_CARGO_HOME="${CARGO_HOME:-}"
+    _MUKTI_OLD_RUSTUP_HOME="${RUSTUP_HOME:-}"
+    export _MUKTI_OLD_PATH _MUKTI_OLD_CARGO_HOME _MUKTI_OLD_RUSTUP_HOME
+fi
+
+# Rust's two homes, both inside the project.
+#   CARGO_HOME  — downloaded packages and any tool we install with `cargo install`
+#   RUSTUP_HOME — the compiler itself
+export CARGO_HOME="$_MUKTI_SANDBOX/cargo"
+export RUSTUP_HOME="$_MUKTI_SANDBOX/rustup"
+
+# The sandbox's own tools come first, then rustup's launchers, then everything
+# that was already there.
+export PATH="$CARGO_HOME/bin:/opt/homebrew/opt/rustup/bin:$_MUKTI_OLD_PATH"
+
+# Build output stays in the project's usual place, not in the sandbox, so the
+# familiar `cargo clean` still does what you expect.
+export CARGO_TARGET_DIR="$_MUKTI_ROOT/target"
+
+# Treat every compiler warning as an error, exactly as CI does, so a warning
+# cannot pass here and then fail the build on GitHub.
+export RUSTFLAGS="-D warnings"
+
+# Where the measurement corpus lives.
+#
+# The paths are NOT written here, and that is deliberate. This file is committed
+# to a public repository, and the folders in question are named after the material
+# they hold. A folder name is not nothing: this project has already had to reword
+# commit messages, while still private, because they named an archive folder and
+# what looked like a client. Writing the path into a public file would make the
+# same mistake permanently.
+#
+# So the paths live in a sibling file that git never sees. Create it once:
+#
+#     cat > .sandbox/corpus-paths.local <<'EOF'
+#     export MUKTI_CORPUS="/path/to/Bangla Word Collection"
+#     export MUKTI_ARCHIVE="/path/to/the document archive"
+#     EOF
+#
+# On this machine the current locations are recorded in Dev-Memory/INDEX.md,
+# which is also never committed. Nothing breaks without the file — only the
+# measurement tools need it, and they say so clearly when it is missing.
+if [ -f "$_MUKTI_SANDBOX/corpus-paths.local" ]; then
+    . "$_MUKTI_SANDBOX/corpus-paths.local"
+fi
+
+export _MUKTI_ACTIVE=1
+
+deactivate_mukti() {
+    [ -z "${_MUKTI_ACTIVE:-}" ] && { echo "the Mukti environment is not active"; return 0; }
+    export PATH="$_MUKTI_OLD_PATH"
+    if [ -n "$_MUKTI_OLD_CARGO_HOME" ]; then export CARGO_HOME="$_MUKTI_OLD_CARGO_HOME"; else unset CARGO_HOME; fi
+    if [ -n "$_MUKTI_OLD_RUSTUP_HOME" ]; then export RUSTUP_HOME="$_MUKTI_OLD_RUSTUP_HOME"; else unset RUSTUP_HOME; fi
+    unset CARGO_TARGET_DIR RUSTFLAGS MUKTI_CORPUS MUKTI_ARCHIVE
+    unset _MUKTI_ACTIVE _MUKTI_OLD_PATH _MUKTI_OLD_CARGO_HOME _MUKTI_OLD_RUSTUP_HOME
+    unset -f deactivate_mukti
+    echo "Mukti build environment switched off."
+}
+
+echo "GRU953 Mukti build environment is on."
+echo "  compiler   : $(rustc --version 2>/dev/null || echo 'not installed yet')"
+echo "  packages   : $CARGO_HOME"
+echo "  build output: $CARGO_TARGET_DIR"
+echo "  corpus     : $( [ -d "$MUKTI_CORPUS" ] && echo found || echo 'NOT FOUND — see Dev-Memory/INDEX.md' )"

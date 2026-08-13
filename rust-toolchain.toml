@@ -1,0 +1,21 @@
+# The exact Rust toolchain this project is built and tested with.
+#
+# Why pin at all: before this file existed, CI installed whatever "stable"
+# happened to be that day, so a compiler change could alter behaviour with no
+# commit to explain it. Anyone who checks this repository out now gets the same
+# compiler we measured with — rustup reads this file and switches automatically,
+# downloading the version if it is missing.
+#
+# Deliberately NOT listed here: the Apple targets needed for the universal macOS
+# build. Those are installed only in the local sandbox (see .sandbox/activate),
+# because forcing a Linux or Windows CI runner to fetch Apple targets wastes
+# minutes and buys nothing.
+#
+# Note this is a different thing from `rust-version` in Cargo.toml. That states
+# the OLDEST compiler the library is claimed to work with. This states the ONE
+# compiler we actually build and measure with.
+
+[toolchain]
+channel = "1.97.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

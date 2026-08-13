@@ -13,3 +13,24 @@
 
 # Tauri regenerates these on every build; they are not source.
 /crates/mukti-app/gen/
+
+# The project-local build environment: its own Rust compiler and package cache.
+# Several gigabytes, entirely rebuildable, and specific to this machine. The
+# files that DEFINE it — rust-toolchain.toml, deny.toml, .sandbox/activate — are
+# committed; the downloaded contents are not.
+#
+# `corpus-paths.local` is excluded on purpose and must stay excluded: it names the
+# folders holding the private document archive, and those folder names are
+# themselves the sort of thing this project has already had to scrub from commit
+# messages once.
+/.sandbox/*
+!/.sandbox/activate
+
+# Claude Code's per-machine settings, which hold absolute local paths.
+/.claude/settings.local.json
+
+# Fuzzing artefacts: generated inputs and crash cases, some derived from real
+# documents. The fuzz targets themselves are source and ARE committed.
+/fuzz/artifacts/
+/fuzz/corpus/
+/fuzz/target/

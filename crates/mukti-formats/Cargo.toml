@@ -10,9 +10,20 @@ authors.workspace = true
 
 [dependencies]
 gru953-mukti = { path = "../mukti-core", version = "0.4.0" }
-quick-xml = "0.37"
+
+# quick-xml 0.41 is the first release fixing RUSTSEC-2026-0194 (quadratic time
+# checking a start tag for duplicate attribute names) and RUSTSEC-2026-0195
+# (unbounded namespace-declaration allocation). Both are reachable here: this
+# crate parses .docx/.xlsx/.pptx XML that the user supplies. Do not go back.
+quick-xml = "0.41"
+
 zip = { version = "2", default-features = false, features = ["deflate"] }
-lopdf = "0.36"
+
+# lopdf 0.42 is the first release fixing RUSTSEC-2026-0187: `load_mem` recursed
+# without bound through nested PDF arrays, so a ~21 KB crafted file aborted the
+# process with SIGABRT — a stack overflow, so not even catchable. Reachable by
+# opening any PDF. Do not go back below 0.42.
+lopdf = "0.44"
 
 [lints]
 workspace = true

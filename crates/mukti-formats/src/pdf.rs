@@ -144,7 +144,22 @@ fn page_text(
         .map(|(name, dict)| (name.clone(), classify_font(dict)))
         .collect();
 
-    let Ok(data) = document.get_page_content(page) else {
+    // A cap on how much one page may expand to when decompressed.
+    //
+    // A PDF content stream is compressed drawing instructions, and the
+    // compression ratio has no ceiling — so a small file can ask for an
+    // unbounded amount of memory. lopdf 0.44 provides this limited variant for
+    // exactly that reason; the unlimited `get_page_content` accumulates whatever
+    // it is handed. A page of text is normally a few kilobytes, so 32 MiB is
+    // roughly a thousand times generous and still bounded.
+    //
+    // Over the limit, the page is skipped and counted rather than aborting the
+    // whole document: one hostile or broken page should not lose the other
+    // ninety-nine. This matches how a page of unreadable fonts is treated.
+    const MAX_PAGE_CONTENT: usize = 32 * 1024 * 1024;
+
+    let Ok(data) = document.get_page_content_with_limit(page, MAX_PAGE_CONTENT) else {
+        *skipped += 1;
         return Ok(());
     };
     let content = Content::decode(&data)?;

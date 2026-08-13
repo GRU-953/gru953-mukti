@@ -1,0 +1,219 @@
+# Dependency policy for GRU953 Mukti, enforced by `cargo deny check`.
+#
+# Why this file exists: the original release audited all 484 packages by hand,
+# once, and wrote the result into THIRD-PARTY-LICENSES. A hand audit is only
+# true on the day it is done. This file turns the same judgement into a check
+# that runs every time, so a dependency update cannot quietly introduce a
+# copyleft licence or a known vulnerability into an MIT-licensed product.
+#
+# Run it with:   cargo deny check
+# Just licences: cargo deny check licenses
+
+[graph]
+# Check the three platforms actually shipped, plus the Intel Mac slice of the
+# universal build. A dependency that is fine on macOS but GPL on Linux would
+# otherwise slip through.
+targets = [
+    { triple = "aarch64-apple-darwin" },
+    { triple = "x86_64-apple-darwin" },
+    { triple = "x86_64-unknown-linux-gnu" },
+    { triple = "x86_64-pc-windows-msvc" },
+]
+all-features = true
+
+# ---------------------------------------------------------------------------
+# Known security advisories
+# ---------------------------------------------------------------------------
+[advisories]
+version = 2
+yanked = "deny"
+
+# A published SECURITY VULNERABILITY fails the build, always. Nothing below is a
+# vulnerability — every entry is an "unmaintained crate" notice, meaning nobody
+# is looking after the code any more, not that a hole is known in it.
+#
+# This list was empty until 13 August 2026, and adding to it is meant to be
+# uncomfortable. Each entry says what it is, why it cannot simply be fixed, and
+# what would change that. Anything that cannot be written that way does not
+# belong here.
+#
+# Worth recording plainly: turning this check on for the first time immediately
+# found three real vulnerabilities in the file parsers (lopdf and quick-xml), all
+# published after the original hand audit. Those were fixed by upgrading, not
+# ignored. That is the difference this file is for.
+ignore = [
+    # ---------------------------------------------------------------------
+    # The GTK3 bindings — ten crates, Linux only
+    # ---------------------------------------------------------------------
+    # Tauri v2 draws its window on Linux through GTK3, and the Rust bindings to
+    # GTK3 were retired when their authors moved to GTK4. Measured 13 Aug 2026:
+    # 11 GTK crates in the Linux dependency graph, **zero** on macOS. So this
+    # affects the Ubuntu build only; the Mac and Windows builds use WebKit and
+    # WebView2 and never compile any of it.
+    #
+    # Not fixable here. They arrive through Tauri, and no amount of work in this
+    # project removes them. Every Tauri v2 Linux application carries the same
+    # notices.
+    #
+    # Revisit when: Tauri moves off GTK3, or any of these turns into a real
+    # vulnerability rather than a maintenance notice.
+    { id = "RUSTSEC-2024-0411", reason = "gdkwayland-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+    { id = "RUSTSEC-2024-0412", reason = "gdk — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+    { id = "RUSTSEC-2024-0413", reason = "atk — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+    { id = "RUSTSEC-2024-0414", reason = "gdkx11-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+    { id = "RUSTSEC-2024-0415", reason = "gtk — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+    { id = "RUSTSEC-2024-0416", reason = "atk-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+    { id = "RUSTSEC-2024-0417", reason = "gdkx11 — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+    { id = "RUSTSEC-2024-0418", reason = "gdk-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+    { id = "RUSTSEC-2024-0419", reason = "gtk3-macros — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+    { id = "RUSTSEC-2024-0420", reason = "gtk-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
+
+    # ---------------------------------------------------------------------
+    # proc-macro-error — build-time only
+    # ---------------------------------------------------------------------
+    # A helper for producing nice compiler messages from macros. Runs while the
+    # code is being compiled and no part of it exists in anything a user
+    # installs. Absent from the macOS graph entirely; on Linux it arrives with
+    # gtk3-macros, so it leaves when GTK3 does.
+    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error — compile-time macro helper, never shipped; arrives with gtk3-macros on Linux" },
+
+    # ---------------------------------------------------------------------
+    # The unic-* family — five crates, all platforms
+    # ---------------------------------------------------------------------
+    # Unicode character-property tables, reached through Tauri. These are the
+    # only entries here that are present in the shipped binary on every platform,
+    # so they deserve the most scepticism.
+    #
+    # What they do bounds the risk: they answer questions like "is this character
+    # allowed to start an identifier?" from generated lookup tables. No parsing of
+    # attacker-controlled input, no allocation driven by input size, no I/O.
+    # "Unmaintained" here means the Unicode tables will not be updated for future
+    # Unicode versions — a staleness problem, not a safety one.
+    #
+    # Revisit when: Tauri drops them, or any becomes a real vulnerability. Unlike
+    # the GTK3 entries, do NOT wave these through on a future review without
+    # re-reading what they are used for.
+    { id = "RUSTSEC-2025-0075", reason = "unic-char-range — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
+    { id = "RUSTSEC-2025-0080", reason = "unic-common — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
+    { id = "RUSTSEC-2025-0081", reason = "unic-char-property — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
+    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
+    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
+]
+
+# ---------------------------------------------------------------------------
+# Licences
+# ---------------------------------------------------------------------------
+[licenses]
+version = 2
+confidence-threshold = 0.93
+
+# A policy properly lists more licences than the tree happens to contain today,
+# so "you allowed something you did not need" is not a finding worth failing on.
+unused-allowed-license = "allow"
+
+# Permissive licences only. Mukti ships under MIT, and the conversion tables it
+# is built on are MIT, so anything demanding that users receive source under
+# stronger terms would change what the product is.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unlicense",
+    "Zlib",
+    "BSL-1.0",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "OFL-1.1",          # the bundled Noto fonts
+    "CDLA-Permissive-2.0",
+]
+
+# Deliberately absent, and why:
+#   GPL / LGPL / AGPL / SSPL — incompatible with shipping this as MIT.
+#   MPL-2.0 — NOT blanket-allowed. It is weak, file-level copyleft, which is
+#             acceptable here, but only as a named decision. See the exceptions
+#             below, which permit it for exactly five crates and nothing else.
+#             A sixth MPL dependency arriving should make someone think, not
+#             sail through.
+
+# ---------------------------------------------------------------------------
+# MPL-2.0, permitted for five named crates only
+# ---------------------------------------------------------------------------
+# Established by measurement on 13 August 2026, not assumption:
+#
+#   * All five reach the project through Tauri's web-view layer — four via
+#     `dom_query` → `tauri-utils`, and `option-ext` via `dirs-sys` → `dirs`.
+#   * They ARE in the desktop app's runtime dependency graph, so they ship.
+#   * They are absent from all three publishable crates — `gru953-mukti`,
+#     `mukti-formats` and `mukti-cli` each have zero MPL dependencies, verified
+#     with `cargo tree --edges normal`. The library and command-line tool carry
+#     no MPL obligation at all.
+#   * MPL-2.0 is file-level copyleft and explicitly permits distribution inside
+#     a larger differently-licensed work. Mukti uses all five unmodified,
+#     straight from crates.io, so the only duty is to say so and to point at the
+#     source — which `THIRD-PARTY-LICENSES` lines 147-155 already does, naming
+#     each crate. This exception simply makes that existing, considered decision
+#     machine-checkable instead of a claim in a text file.
+#
+# If any of these is ever modified rather than used as published, the obligation
+# changes and this comment stops being true. Do not modify them.
+
+[[licenses.exceptions]]
+name = "cssparser"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "cssparser-macros"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "dtoa-short"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "selectors"
+allow = ["MPL-2.0"]
+
+[[licenses.exceptions]]
+name = "option-ext"
+allow = ["MPL-2.0"]
+
+[[licenses.clarify]]
+# The `fst` crate is dual Unlicense/MIT; state it rather than rely on detection.
+name = "fst"
+expression = "Unlicense OR MIT"
+license-files = []
+
+# ---------------------------------------------------------------------------
+# What may be depended on at all
+# ---------------------------------------------------------------------------
+[bans]
+multiple-versions = "warn"   # the Tauri tree makes some duplication unavoidable
+wildcards = "deny"           # never depend on "*"; a build must be reproducible
+highlight = "all"
+
+# The three devtools depend on sibling crates by path with no version, which
+# `wildcards = "deny"` flags. That is the correct default for anything published,
+# but all three set `publish = false` and exist only inside this workspace, so
+# there is no version for them to pin against. This narrows the rule to what it
+# is actually for: a real "*" version requirement on a real published crate.
+allow-wildcard-paths = true
+
+# Nothing is banned outright yet. Candidates if they ever appear: anything
+# pulling in a full async HTTP stack, since Mukti works entirely offline and has
+# no business opening a network connection.
+deny = []
+
+# ---------------------------------------------------------------------------
+# Where packages may come from
+# ---------------------------------------------------------------------------
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# No git dependencies. Every dependency comes from crates.io, where versions are
+# immutable — a git branch can be rewritten under you.
+allow-git = []

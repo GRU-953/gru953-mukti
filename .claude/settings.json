@@ -1,0 +1,46 @@
+{
+  "env": {
+    "RUSTFLAGS": "-D warnings",
+    "CARGO_TERM_COLOR": "always"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(cargo build:*)",
+      "Bash(cargo test:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo tree:*)",
+      "Bash(cargo deny:*)",
+      "Bash(cargo audit:*)",
+      "Bash(cargo run:*)",
+      "Bash(rustc --version)",
+      "Bash(cargo --version)",
+      "Bash(rustup show:*)",
+      "Bash(rustup toolchain list:*)",
+      "Bash(rustup target list:*)",
+      "Bash(rustup component list:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git fsck:*)",
+      "Bash(git for-each-ref:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh release list:*)",
+      "Bash(gh release view:*)",
+      "Bash(lipo -archs:*)",
+      "Bash(shasum:*)",
+      "Bash(du -sh:*)",
+      "Bash(df -h:*)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)"
+    ]
+  }
+}
