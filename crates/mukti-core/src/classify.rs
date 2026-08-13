@@ -207,6 +207,20 @@ impl Features {
         // register these documents are written in.
         let lower = word.to_ascii_lowercase();
         let bare = lower.trim_matches(|c: char| !c.is_ascii_alphabetic());
+        // The raw word must be ASCII, and the big dictionary is asked about the
+        // raw word — both deliberately, both measured.
+        //
+        // The obvious-looking improvement is to test `bare` instead, so that
+        // `(Owners’` keeps its English protection: Word curled the apostrophe,
+        // the word is therefore not ASCII, and it converts to `(ঙহিবৎং্থ`.
+        // That was tried on 14 August 2026 and **rejected on measurement**.
+        // Trimming the ends exposes short Bijoy cores that land on English
+        // words, and detection recall fell from 99.962% to 98.936% — through
+        // the 99% gate — while the English false-positive rate did not move at
+        // all, staying at 0.014%. A thousand-odd real conversions lost for no
+        // measurable gain. Words like `(Owners’` remain a known residue inside
+        // the measured 0.014%; see R16l. Do not change this without re-running
+        // `eval` and reading both numbers.
         let is_english = word.is_ascii()
             && (ENGLISH_GUARD.contains(&bare) || Dictionary::english().contains_english(word));
 

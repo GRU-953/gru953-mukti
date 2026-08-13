@@ -25,13 +25,17 @@ use gru953_mukti::convert;
 use gru953_mukti::dictionary::Dictionary;
 use gru953_mukti::encoding::{decode, TextEncoding};
 use gru953_mukti::tokenise::{tokenise, Kind};
-use mukti_formats::{convert_office, convert_pdf_to_text};
+use mukti_formats::{
+    convert_legacy_office, convert_office, convert_pdf_to_text, LegacyFormat,
+    PLAIN_TEXT_ONLY_NOTICE,
+};
 
 const USAGE: &str = "\
 GRU953 Mukti — convert legacy Bangla text to Unicode.
 
   mukti convert <file>...    convert files, writing a new file beside each one
-                             (.txt .csv .md .json and .docx .xlsx .pptx)
+                             (.txt .csv .md .json, .docx .xlsx .pptx,
+                              .doc .xls .ppt, and .pdf)
   mukti check <file>...      say what would change, and write nothing
   mukti convert -            read from the keyboard or a pipe, write to screen
 
@@ -45,6 +49,7 @@ Options
 
 Examples
   mukti convert report.txt              writes report.unicode.txt
+  mukti convert notes.doc               writes notes.unicode.docx (text only)
   mukti check *.txt                     shows what would change, changes nothing
   cat old.txt | mukti convert -         converts a pipe
 ";
@@ -202,6 +207,15 @@ fn handle(
     let from_pipe = path.as_os_str() == "-";
     if is_office(path) && !from_pipe {
         return handle_office(path, mode, in_place, out, quiet, font);
+    }
+    if !from_pipe {
+        if let Some(legacy) = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .and_then(LegacyFormat::from_extension)
+        {
+            return handle_legacy(path, legacy, mode, in_place, out, quiet);
+        }
     }
     if !from_pipe
         && path
@@ -390,6 +404,90 @@ fn handle_office(
         );
     }
     Ok(tally)
+}
+
+/// The old binary formats: `.doc`, `.xls`, `.ppt`.
+///
+/// These cannot be rewritten in place the way a `.docx` can — there is no XML to
+/// edit, and only the text can be recovered — so a **new** modern document is
+/// written beside the original and the original is never touched.
+fn handle_legacy(
+    path: &Path,
+    format: LegacyFormat,
+    mode: Mode,
+    in_place: bool,
+    out: Option<&Path>,
+    quiet: bool,
+) -> Result<Tally, String> {
+    // `--in-place` cannot mean anything here: the file that comes out is a
+    // different format from the one that went in. Saying so is better than
+    // quietly writing a .docx into a name ending .doc.
+    if in_place {
+        return Err(format!(
+            "{} is an older {} file, so the converted copy has to be a .{} — a different format.\n\
+             --in-place cannot be used for these. Leave it off to write a new file beside the original, or use --out to choose a name.",
+            path.display(),
+            path.extension().unwrap_or_default().to_string_lossy(),
+            format.modern_extension()
+        ));
+    }
+
+    let bytes = fs::read(path).map_err(|e| {
+        format!(
+            "Could not open {}: {e}\nCheck the name is right and that the file is not open in another programme.",
+            path.display()
+        )
+    })?;
+
+    let outcome = convert_legacy_office(&bytes, format).map_err(|e| {
+        format!(
+            "Could not read {} as an older Word, Excel or PowerPoint file.\n\
+             It may be damaged, or it may be a newer file that has simply been given an old name — try renaming it to .{}x.\n\
+             (The technical reason: {e})",
+            path.display(),
+            path.extension().unwrap_or_default().to_string_lossy()
+        )
+    })?;
+
+    let tally = Tally {
+        converted: outcome.summary.words_converted,
+        untouched: outcome.summary.words_untouched,
+    };
+
+    if mode == Mode::Check {
+        if !quiet {
+            println!("{}: {}", path.display(), tally.describe(mode));
+            println!("  {}", PLAIN_TEXT_ONLY_NOTICE);
+        }
+        return Ok(tally);
+    }
+
+    let destination = match out {
+        Some(o) => o.to_path_buf(),
+        None => beside_as(path, format.modern_extension()),
+    };
+    fs::write(&destination, &outcome.document).map_err(|e| {
+        format!(
+            "Could not write {}: {e}\nCheck you have permission to write to that folder.",
+            destination.display()
+        )
+    })?;
+
+    if !quiet {
+        println!("{} -> {}", path.display(), destination.display());
+        println!("  {}", tally.describe(mode));
+        if outcome.was_empty {
+            println!("  No text could be recovered from this file, so the new document is empty.");
+        }
+        println!("  {}", PLAIN_TEXT_ONLY_NOTICE);
+    }
+    Ok(tally)
+}
+
+/// `notes.doc` becomes `notes.unicode.docx` — a new name **and** a new format.
+fn beside_as(path: &Path, extension: &str) -> PathBuf {
+    let stem = path.file_stem().unwrap_or_default().to_string_lossy();
+    path.with_file_name(format!("{stem}.unicode.{extension}"))
 }
 
 /// `report.txt` becomes `report.unicode.txt`.

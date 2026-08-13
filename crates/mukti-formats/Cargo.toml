@@ -24,6 +24,15 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # process with SIGABRT — a stack overflow, so not even catchable. Reachable by
 # opening any PDF. Do not go back below 0.42.
 lopdf = "0.44"
+# office_oxide reads the pre-2007 binary formats: .doc, .xls and .ppt. Vetted
+# before adopting, on all 141 old-format files in the measurement archive: every
+# one opened, none crashed, worst case 0.02 s. Only its *reading* code is used —
+# the modern files are written here, with `zip` and `quick-xml` below. It needs
+# Rust 1.88, which is why this workspace declares that as its minimum.
+# It extracts plain text only, with no font names, so old formats convert at the
+# same accuracy as .txt. That limit is stated to the user, not hidden.
+office_oxide = "0.1.8"
+
 
 [dev-dependencies]
 # Property testing. The workspace had none: every one of its 105 original tests

@@ -6,9 +6,13 @@
 //! same document with the same formatting, tables and layout, in which the
 //! legacy Bangla has become Unicode.
 
+pub mod legacy_office;
 pub mod office;
 pub mod pdf;
 
+pub use legacy_office::{
+    convert_legacy_office, LegacyFormat, LegacyOutcome, PLAIN_TEXT_ONLY_NOTICE,
+};
 pub use office::{convert_office, runs, Run, Summary};
 pub use pdf::convert_pdf_to_text;
 
