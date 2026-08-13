@@ -32,22 +32,45 @@ use gru953_mukti::roundtrip::{is_testable_word, normalise_nukta, to_bijoy};
 use gru953_mukti::{convert, detect, word_is_well_formed, LegacyEncoding};
 use stats::{edit_distance, thousands, Proportion};
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> std::process::ExitCode {
+    match run() {
+        Ok(missed) if missed.is_empty() => std::process::ExitCode::SUCCESS,
+        Ok(missed) => {
+            eprintln!("\n{} target(s) NOT MET:", missed.len());
+            for one in &missed {
+                eprintln!("  - {one}");
+            }
+            eprintln!(
+                "\nThis command now fails when a target is missed. Until 13 August 2026\n\
+                 it printed \"NOT MET\" and exited successfully, so every target could be\n\
+                 missed and anything asking whether it passed was told yes."
+            );
+            std::process::ExitCode::FAILURE
+        }
+        Err(e) => {
+            eprintln!("eval: {e}");
+            std::process::ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let cfg = Config::parse()?;
+    let mut gates = Gates::default();
 
     println!("GRU953 Mukti — accuracy report");
     println!("================================\n");
 
-    m1_round_trip(&cfg)?;
-    m2_character_grid(&cfg)?;
+    m1_round_trip(&cfg, &mut gates)?;
+    m2_character_grid(&cfg, &mut gates)?;
     m3_dictionary_on_real_documents(&cfg)?;
     m4_vowel_preservation(&cfg)?;
-    detection(&cfg)?;
-    detection_with_context(&cfg)?;
+    detection(&cfg, &mut gates)?;
+    detection_with_context(&cfg, &mut gates)?;
 
     println!("\nEvery figure above is measured, not estimated. Sample sizes are");
     println!("stated because a percentage without one means nothing.");
-    Ok(())
+    Ok(gates.missed)
 }
 
 // ---------------------------------------------------------------------------
@@ -60,7 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// (one minus the edit distance over the total length). Word accuracy is the
 /// harsher and the more honest of the two: a single wrong character ruins the
 /// word for anybody searching for it, which is what this tool is for.
-fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
+fn m1_round_trip(cfg: &Config, gates: &mut Gates) -> Result<(), Box<dyn std::error::Error>> {
     heading("M1", "Round trip: Unicode -> Bijoy -> Unicode");
 
     let bytes = fs::read(&cfg.extended_fst)?;
@@ -143,7 +166,7 @@ fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
     );
     println!("            on one consonant, or `আ` typed as `অ` plus a matra. Mukti repairs");
     println!("            these to the correct spelling; the word list, not Mukti, is wrong.");
-    gate("word accuracy", words.rate(), 0.99);
+    gates.at_least("word accuracy", words.rate(), 0.99);
     top_patterns(&patterns, "  Most common failures");
     Ok(())
 }
@@ -159,7 +182,7 @@ fn m1_round_trip(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
 /// la-phala and the rest. These are precisely where Bijoy conversion fails, and
 /// unlike a word list the grid is exhaustive rather than a sample. The bar is
 /// 100%: anything less names a specific missing entry in the table.
-fn m2_character_grid(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
+fn m2_character_grid(cfg: &Config, gates: &mut Gates) -> Result<(), Box<dyn std::error::Error>> {
     heading(
         "M2",
         "Character grid: every consonant x every vowel and conjunct",
@@ -220,7 +243,7 @@ fn m2_character_grid(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
     println!("         which Bengali does not permit. The rest of each such row is spelled");
     println!("         correctly and Mukti produces that spelling. The grid is wrong here,");
     println!("         not Mukti — and it is judged so by orthography, not by agreeing with us.");
-    gate("character grid", p.rate(), 1.0);
+    gates.at_least("character grid", p.rate(), 1.0);
     top_patterns(&patterns, "  Combinations that fail");
     Ok(())
 }
@@ -254,8 +277,16 @@ fn m3_dictionary_on_real_documents(cfg: &Config) -> Result<(), Box<dyn std::erro
     let mut found_shipped = 0usize;
 
     for row in rows(&cfg.labels)? {
-        let Row { label, token, .. } = row?;
-        if label != "legacy" {
+        // `split` was discarded here with `..`, which made M3 the one measurement
+        // that read the TUNING half even when asked for the held-out half. A figure
+        // measured partly on the data used to tune is not a held-out figure.
+        let Row {
+            split,
+            label,
+            token,
+            ..
+        } = row?;
+        if split != cfg.split || label != "legacy" {
             continue;
         }
         let converted = convert(&token);
@@ -351,7 +382,7 @@ fn m4_vowel_preservation(cfg: &Config) -> Result<(), Box<dyn std::error::Error>>
 /// * **False-positive rate** — how much non-legacy text is wrongly converted.
 ///   That silently corrupts readable English and Unicode Bengali, and the user
 ///   may never notice. It is the gate.
-fn detection(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
+fn detection(cfg: &Config, gates: &mut Gates) -> Result<(), Box<dyn std::error::Error>> {
     heading("D", "Detection on held-out documents, one word at a time");
 
     let mut counts: BTreeMap<&'static str, (usize, usize)> = BTreeMap::new();
@@ -362,7 +393,9 @@ fn detection(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
             token,
             ..
         } = row?;
-        if split != "test" {
+        // Was `split != "test"`, hard-coded — so `--split tune` still reported the
+        // held-out half, quietly defeating the one discipline the split exists for.
+        if split != cfg.split {
             continue;
         }
         let name: &'static str = match label.as_str() {
@@ -406,7 +439,7 @@ fn detection(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
     println!("  Precision                  {}", precision.describe());
     println!("  F1                         {:.4}", f1);
     println!("  FALSE POSITIVES            {}", fpr.describe());
-    gate_max("false-positive rate", fpr.rate(), 0.001);
+    gates.at_most("false-positive rate (no context)", fpr.rate(), 0.001);
 
     println!("\n  Wrongly converted, by what the text actually was:");
     for key in ["unicode", "english", "inert"] {
@@ -433,7 +466,10 @@ fn detection(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
 ///   and the figure that gets quoted comes from `test`, which is never looked
 ///   at while anything is being adjusted. Tuning on the data you report on is
 ///   how a classifier scores 99% on paper and fails on the first real file.
-fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>> {
+fn detection_with_context(
+    cfg: &Config,
+    gates: &mut Gates,
+) -> Result<(), Box<dyn std::error::Error>> {
     heading(
         "D2",
         &format!(
@@ -544,8 +580,8 @@ fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>
     println!("  Precision                  {}", precision.describe());
     println!("  F1                         {f1:.4}");
     println!("  False positives, aggregate {}", fpr.describe());
-    gate("recall", recall.rate(), 0.99);
-    gate_max("false positives, aggregate", fpr.rate(), 0.001);
+    gates.at_least("recall", recall.rate(), 0.99);
+    gates.at_most("false positives, aggregate", fpr.rate(), 0.001);
 
     println!("\n  Wrongly converted, by what the text actually was:");
     for key in ["unicode", "english", "inert"] {
@@ -555,7 +591,7 @@ fn detection_with_context(cfg: &Config) -> Result<(), Box<dyn std::error::Error>
     // The gate that actually binds. The aggregate is diluted by the enormous,
     // perfectly clean Unicode class; English is where readable text gets
     // destroyed, so English is what has to clear the bar.
-    gate_max("false positives on ENGLISH", english.rate(), 0.001);
+    gates.at_most("false positives on ENGLISH", english.rate(), 0.001);
 
     let (amb_hit, amb_n) = get("legacy_ascii");
     println!("\n  Pure-ASCII legacy — genuinely ambiguous, reported on its own:");
@@ -603,7 +639,7 @@ struct Config {
 impl Config {
     fn parse() -> Result<Self, String> {
         let mut corpus = None;
-        let mut labels = PathBuf::from("local/labelled-tokens.tsv");
+        let mut labels = PathBuf::from("local/labelled-corpus.tsv");
         let mut extended_fst = PathBuf::from("local/extended-words.fst");
         let mut split = String::from("test");
         let mut it = std::env::args().skip(1);
@@ -755,12 +791,49 @@ fn heading(id: &str, title: &str) {
     println!("{}", "-".repeat(72));
 }
 
-fn gate(what: &str, value: f64, target: f64) {
-    let verdict = if value >= target { "MET" } else { "NOT MET" };
-    println!("  Target {what} >= {:.1}%: {verdict}", target * 100.0);
+/// Every unmet target, collected so the command can fail on them.
+///
+/// Until 13 August 2026 a gate only *printed* "NOT MET" and `eval` still exited
+/// successfully. So the six targets this project measures itself against could
+/// every one of them be missed, and any script or pipeline asking "did it pass?"
+/// would be told yes. A target that cannot fail is a wish.
+#[derive(Default)]
+struct Gates {
+    missed: Vec<String>,
 }
 
-fn gate_max(what: &str, value: f64, limit: f64) {
-    let verdict = if value <= limit { "MET" } else { "NOT MET" };
-    println!("  Target {what} <= {:.2}%: {verdict}", limit * 100.0);
+impl Gates {
+    /// A floor: the value must be at least the target.
+    fn at_least(&mut self, what: &str, value: f64, target: f64) {
+        let met = value >= target;
+        println!(
+            "  Target {what} >= {:.1}%: {}",
+            target * 100.0,
+            if met { "MET" } else { "NOT MET" }
+        );
+        if !met {
+            self.missed.push(format!(
+                "{what}: {:.4}%, needed at least {:.1}%",
+                value * 100.0,
+                target * 100.0
+            ));
+        }
+    }
+
+    /// A ceiling: the value must be no more than the limit.
+    fn at_most(&mut self, what: &str, value: f64, limit: f64) {
+        let met = value <= limit;
+        println!(
+            "  Target {what} <= {:.2}%: {}",
+            limit * 100.0,
+            if met { "MET" } else { "NOT MET" }
+        );
+        if !met {
+            self.missed.push(format!(
+                "{what}: {:.4}%, must be no more than {:.2}%",
+                value * 100.0,
+                limit * 100.0
+            ));
+        }
+    }
 }

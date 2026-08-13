@@ -222,7 +222,7 @@ fn split_of(path: &Path) -> &'static str {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut roots: Vec<PathBuf> = Vec::new();
-    let mut out = PathBuf::from("local/labelled-tokens.tsv");
+    let mut out = PathBuf::from("local/labelled-corpus.tsv");
     let mut it = std::env::args().skip(1);
     while let Some(arg) = it.next() {
         match arg.as_str() {

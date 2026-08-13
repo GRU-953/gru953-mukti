@@ -108,29 +108,54 @@ intact, no legacy font left behind.
 
 ## Accuracy
 
-Measured, each with its sample size. To reproduce, you need your own document
-set (see [How that was measured](#accuracy) below and `HANDOVER.md` §6) and then:
+Measured, each with its sample size. To reproduce them you need your own document
+set — the material these were measured against is private and cannot be shipped
+(see `HANDOVER.md` §6 for what kind of set works). Then, in order:
 
 ```
-cargo run --release -p eval -- --corpus "<your word list folder>" --labels <your labelled set>
+cargo run --release -p corpus-label  -- "<your documents folder>"
+cargo run --release -p lexicon-build -- --corpus "<your word list folder>" --mode extended
+cargo run --release -p eval          -- --corpus "<your word list folder>"
 ```
 
-There is no default for `--corpus`: the material these figures were measured
-against is private and cannot be shipped.
+The first two write to `local/`, which is where `eval` looks by default, so the
+third command needs nothing but the word list. `--corpus` has no default on
+purpose: it names material that is not in this repository, and a default would
+only produce a confusing error.
+
+**`eval` exits with a failure if any target is missed.** Until 13 August 2026 it
+printed "NOT MET" and exited successfully, so a script asking whether the figures
+still held was told yes regardless.
+
+Re-measured from scratch on 13 August 2026, on a freshly rebuilt answer key of
+3,782,953 labelled tokens from 1,377 real documents.
 
 | | Result | Sample |
 |---|---|---|
 | Conversion, word accuracy | **99.989%** | 473,244 words |
 | Conversion, character accuracy | 99.997% | 3,879,440 characters |
 | Every consonant × every vowel and conjunct | **100%** | 3,096 combinations |
-| Detection, legacy words found | **99.951%** | 154,928 words |
-| Detection, English wrongly converted | **0.006%** | 462,074 words |
-| Detection, Unicode Bangla wrongly converted | **0.000%** | 343,077 words |
+| Detection, legacy words found | **99.962%** | 177,079 words |
+| Detection, English wrongly converted | **0.014%** | 494,050 words |
+| Detection, Unicode Bangla wrongly converted | **0.000%** | 436,952 words |
 | Misspellings preserved, not "corrected" | 99.979% | 14,214 words |
 
 The detection figures come from a **held-out** half of the data, never looked at
-while anything was tuned. The tuning half gave 99.962% and 0.014% on the same
-code, so these are not a lucky draw.
+while anything was tuned.
+
+**Two of these moved, and both are worth saying out loud.** Recall improved
+slightly, on a larger sample. But English wrongly converted went from 0.006% to
+**0.014%** — still comfortably inside the 0.1% target, and still the wrong
+direction. Two things account for it: the held-out half is now a different set of
+documents (see below), and a class of false positive was found that this corpus
+cannot show — an accented European name like `Tomáš` has its accented letters
+inside the byte range Bijoy reuses, so it can be mistaken for legacy Bangla.
+
+**The old figures cannot be reproduced exactly, and that is not a caveat being
+buried.** Which documents land in the held-out half is decided by a hash of each
+file's path, and the document archive has moved. So the halves are a different
+split of the same material. Re-measuring was the honest option; quoting figures
+whose answer key no longer existed was not.
 
 <details>
 <summary><b>How that was measured — including what it cannot tell you</b></summary>
@@ -147,24 +172,24 @@ an English run *is not*. No hand-labelling, and the code under test is never
 asked what it thinks. Runs declaring no font are excluded rather than guessed
 at, as are runs whose declared font contradicts their own bytes.
 
-**One figure has been withdrawn.** Earlier versions of this page reported that
-78.4% of converted words, over real documents, were found in the dictionary.
-That number should not have been published, for two separate reasons.
+**One figure is a lower bound, not an accuracy, and is kept out of the table for
+that reason.** Over real documents, **94.0%** of converted words are found in the
+dictionary — 177,071 words, measured 13 August 2026.
 
-First, it came from a *superseded* answer key. A later run on the final, larger
-answer key gave 93.8% — a materially different figure, and the one that was never
-copied into the documentation.
+Earlier versions of this page said 78.4%. That was wrong: it came from a
+superseded answer key and was never updated when the final one was built. The
+re-measurement above settles it.
 
-Second, and more importantly, **neither number means what it looks like.** It is
-a *lower* bound, not an error rate: names, places, acronyms and rare words are in
-no word list, so a perfectly converted word can be absent from it. "78.4%" was
-never "21.6% wrong", and nor is 93.8%.
+**But 94.0% is still not an accuracy, and 6% is not an error rate.** Names,
+places, acronyms and rare words are in no word list, so a perfectly converted word
+can be missing from it. The figure is a floor on how well conversion does, not a
+measure of it.
 
-Rather than swap one unverifiable number for another, the figure is withdrawn
-until it is measured again from scratch and, separately, until a sample of the
-words *not* found is classified by hand into names, rare words, and genuine
-errors. Only that last step turns this into something quotable. The other figures
-in the table above are unaffected.
+What would make it quotable is one more piece of work: taking a sample of the
+words *not* found and classifying each by hand as a name, a rare word, or a
+genuine mis-conversion. Until that is done, the honest thing is to publish the
+number with what it does and does not mean attached — which is what this paragraph
+is for.
 
 **PDF quality varies widely.** Across 60 legacy-font PDFs: 28 good (70%+ real
 words), 19 fair, 7 poor, 6 produced nothing. Median 71.3%.
