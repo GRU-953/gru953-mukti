@@ -414,6 +414,24 @@ fn rearrange(input: &str) -> String {
 /// The test that matters is simple and hard to fool: legacy Bangla contains
 /// Bengali *words* but **no** Unicode Bengali *characters*, because the bytes
 /// are Latin ones drawn with Bengali shapes.
+/// Does this character say anything about which encoding the text is in?
+///
+/// One function, because the same test is asked three times below and the three
+/// copies must never drift apart.
+///
+/// Every character in the two ranges counts. That includes the curly quotes and
+/// dashes a word processor substitutes automatically, which look like a tempting
+/// thing to exclude — they appear in perfectly ordinary English — but excluding
+/// them was measured and cost real conversions: in SutonnyMJ those same code
+/// points carry Bengali glyphs (`…` at U+2026 is the `ৃ` in `K…wl` → `কৃষি`), and
+/// dropping them from the count pushed three genuine Bijoy lines in the archive
+/// below the density threshold. English is protected by the English test
+/// instead — see [`reads_as_english`], which is where that fault belonged.
+fn carries_encoding_signal(c: char) -> bool {
+    let o = c as u32;
+    (0x00A0..=0x024F).contains(&o) || (0x2010..=0x20FF).contains(&o)
+}
+
 pub fn detect(input: &str) -> Detection {
     let mut bengali = 0usize;
     let mut legacy_range = 0usize;
@@ -468,10 +486,7 @@ pub fn detect(input: &str) -> Detection {
     let exotic = input
         .chars()
         .filter(|c| !c.is_whitespace())
-        .filter(|c| {
-            let o = *c as u32;
-            (0x00A0..=0x024F).contains(&o) || (0x2010..=0x20FF).contains(&o)
-        })
+        .filter(|c| carries_encoding_signal(*c))
         .count();
     let exotic_ratio = exotic as f32 / considered as f32;
 
@@ -507,10 +522,11 @@ pub fn detect(input: &str) -> Detection {
     // whole failure.
     let distinct_exotic = {
         let mut seen: Vec<char> = Vec::new();
-        for c in input.chars().filter(|c| !c.is_whitespace()).filter(|c| {
-            let o = *c as u32;
-            (0x00A0..=0x024F).contains(&o) || (0x2010..=0x20FF).contains(&o)
-        }) {
+        for c in input
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .filter(|c| carries_encoding_signal(*c))
+        {
             if !seen.contains(&c) {
                 seen.push(c);
             }
@@ -520,7 +536,16 @@ pub fn detect(input: &str) -> Detection {
         }
         seen.len()
     };
-    let dense = exotic_ratio >= 0.10 && distinct_exotic >= 2 && !reads_as_english(input);
+    // Density is a statistical argument, so it must not rest on the one kind of
+    // character that is ambiguous. A segment whose *only* unusual characters are
+    // the quotes and dashes a word processor inserts by itself has no case at
+    // all: `Jul ’10 – Dec ’10`, one cell of an English table, scored 0.29 and
+    // came out as `ঔঁষ্ থ১০ ু উবপ্ থ১০`. Genuine Bijoy is unaffected — it also
+    // carries `‡`, `†`, `¨`, `µ` and the rest, which are evidence of nothing else.
+    let dense = exotic_ratio >= 0.10
+        && distinct_exotic >= 2
+        && !reads_as_english(input)
+        && !evidence_is_only_word_processor_typography(input);
     // Both routes to "this is Bijoy" must clear the English test. `dense` did;
     // the trial-conversion route did not, so a line of HTML —
     // `<p className="digest-feature-try">watch something while you keep working`
@@ -946,6 +971,38 @@ const ENGLISH_MARKERS: &[&str] = &[
 ///
 /// Two or more function words is the bar. One can appear by chance in a Bijoy
 /// line, since Bijoy is ASCII underneath; two together effectively never do.
+/// Typography a word processor substitutes on its own: curly quotes, en and em
+/// dash, ellipsis, bullet. Ordinary English is full of them, and SutonnyMJ also
+/// puts Bengali glyphs at the same code points — so they are the one kind of
+/// evidence that is genuinely ambiguous.
+const SUBSTITUTED_BY_WORD_PROCESSORS: [char; 8] = [
+    '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}', '\u{2013}', '\u{2014}', '\u{2026}', '\u{2022}',
+];
+
+/// Is every character that carries encoding signal here one a word processor
+/// inserted by itself? If so the line's whole case for being Bijoy rests on
+/// ambiguous characters, which is no case at all.
+fn evidence_is_only_word_processor_typography(input: &str) -> bool {
+    let mut saw_any = false;
+    for c in input.chars().filter(|c| !c.is_whitespace()) {
+        if carries_encoding_signal(c) {
+            if !SUBSTITUTED_BY_WORD_PROCESSORS.contains(&c) {
+                return false;
+            }
+            saw_any = true;
+        }
+    }
+    saw_any
+}
+
+/// The curated function-word list decides this, and deliberately *not* the
+/// shipped 234,428-word English dictionary. Widening it to real English words
+/// was tried, to protect short phrases like `Category “A”` that carry only one
+/// function word between them. It backfired: a list that large matches Bijoy
+/// fragments too, and five long, unmistakably legacy lines in the archive were
+/// newly read as English and left unconverted. Short English phrases are
+/// protected by [`evidence_is_only_word_processor_typography`] instead, which
+/// costs no legacy evidence at all.
 fn reads_as_english(input: &str) -> bool {
     let mut hits = 0usize;
     for token in input.split(|c: char| !c.is_ascii_alphabetic()) {
@@ -1713,6 +1770,51 @@ mod tests {
                 "symbol- or accent-heavy English was flagged as Bijoy: {line:?}"
             );
         }
+    }
+
+    #[test]
+    fn word_processor_quotes_do_not_turn_english_into_bengali() {
+        // Found by reading the archive's old `.doc` and `.ppt` files, which have
+        // no font information to fall back on. Word had substituted curly quotes
+        // into ordinary English, and because those code points also carry Bengali
+        // glyphs in SutonnyMJ the detector counted them as evidence and rewrote
+        // whole lines. Three real documents were damaged.
+        //
+        // Each pair is the same sentence twice: the straight-quoted form was
+        // always safe, so the quotes alone were the whole fault.
+        for line in [
+            "as \u{201C}Village planting\u{201D}",
+            "Category \u{201C}A\u{201D}",
+            "\u{201C}I\u{2019}m late,\u{201D}  said the visitor,",
+            "\u{201C}Come here,\u{201D} she whispered,\u{201C}come and see.\u{201D}",
+            "Row\tHeading\tJul \u{2019}10 \u{2013} Dec \u{2019}10\tTotal",
+            "A read-aloud text \u{2014} for practice\u{2026}",
+            "\u{2022} Executive Summary \u{2013} pages 5\u{2013}8",
+        ] {
+            assert_ne!(
+                detect(line).encoding,
+                LegacyEncoding::SutonnyMj,
+                "English with word-processor typography was flagged as Bijoy: {line:?}"
+            );
+            assert_eq!(
+                convert_document(line).text,
+                line,
+                "English with word-processor typography was rewritten: {line:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn those_quotes_are_still_converted_inside_genuine_legacy_text() {
+        // The seven characters are removed from the *vote*, not from the table.
+        // A genuinely legacy line containing one must still convert it, or the
+        // fix above would silently start leaving legacy punctuation behind.
+        let source = "\u{201C}gvbyl";
+        let out = convert(source);
+        assert!(
+            !out.contains('\u{201C}'),
+            "the smart quote survived conversion of legacy text: {out:?}"
+        );
     }
 
     #[test]
