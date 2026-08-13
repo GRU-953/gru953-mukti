@@ -89,9 +89,16 @@ mukti convert report.docx --in-place
 | PowerPoint (`.pptx`) | Converted inside the slides; formatting kept |
 | PDF | Text pulled out and converted, saved as plain text — **layout is lost** |
 
-**Older `.doc`, `.xls` and `.ppt` files** cannot be read directly. Open one in
-Word, Excel or PowerPoint and use *Save As* to make a `.docx`, `.xlsx` or
-`.pptx` first.
+| Older Word (`.doc`) | Converted into a new `.docx` beside it — **text only** |
+| Older Excel (`.xls`) | Converted into a new `.xlsx` — **text only** |
+| Older PowerPoint (`.ppt`) | Converted into a new `.pptx` — **text only** |
+
+**About the older formats.** They store no formatting we can carry and no font
+information, so only the words come across — no colours, tables or pictures —
+and Mukti has to decide what is legacy Bangla from the words alone. That is the
+same accuracy as a plain text file, and lower than for a `.docx`. Your original
+file is never changed. Because the converted copy is a different kind of file,
+*replace the original* is not offered for these.
 
 ## Things worth knowing
 
@@ -117,8 +124,9 @@ again. On Windows: click *More info*, then *Run anyway*.
 
 **"… is empty"** — the file has nothing in it.
 
-**"Could not read … as a Word, Excel or PowerPoint file"** — it is probably an
-older `.doc`, `.xls` or `.ppt`. Save it in the newer format first.
+**"Could not read … as an older Word, Excel or PowerPoint file"** — the file may
+be damaged, or it may be a newer file that has simply been given an old name.
+Try renaming it with an `x` on the end: `.docx`, `.xlsx` or `.pptx`.
 
 **Bangla shows as boxes or question marks** — this should not happen in the
 app, which carries its own Bangla font. If you see it in a converted file

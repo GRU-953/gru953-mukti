@@ -41,7 +41,9 @@ use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
 use mukti_formats::office::{is_exactly_legacy_font, is_legacy_font, names_a_font};
-use mukti_formats::{convert_office, convert_pdf_to_text, runs, Summary};
+use mukti_formats::{
+    convert_legacy_office, convert_office, convert_pdf_to_text, runs, LegacyFormat, Summary,
+};
 
 /// What we decided about one file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -349,10 +351,7 @@ fn check(path: &Path, kind: &str, negative: bool) -> Outcome {
     match kind {
         "docx" | "xlsx" | "pptx" => check_office(&bytes, negative),
         "pdf" => check_pdf(&bytes),
-        "doc" | "xls" | "ppt" => Outcome::bad(
-            Status::Unsupported,
-            "the pre-2007 binary format is not supported yet",
-        ),
+        "doc" | "xls" | "ppt" => check_legacy_office(&bytes, kind, negative),
         "txt" | "csv" | "tsv" | "md" | "json" | "html" | "htm" | "py" | "yaml" | "yml"
         | "ipynb" | "sample" | "rev" | "idx" | "pack" => check_text(&bytes, negative),
         _ => Outcome::bad(Status::Unsupported, "not a kind this tool converts"),
@@ -663,6 +662,46 @@ fn local_name(name: &[u8]) -> &[u8] {
     match name.iter().position(|b| *b == b':') {
         Some(i) => &name[i + 1..],
         None => name,
+    }
+}
+
+/// The pre-2007 binary formats, which are read and rewritten as modern ones.
+///
+/// These cannot be checked the way a `.docx` is — nothing is rewritten in place,
+/// so there is no "before" to compare against. What can be checked is stronger
+/// than it sounds: the document we produce must itself survive every Office
+/// invariant, which includes the one that matters most — converting it again
+/// must change nothing further. A converter that leaves legacy text behind, or
+/// that mangles its own output, fails at that second pass.
+fn check_legacy_office(bytes: &[u8], kind: &str, negative: bool) -> Outcome {
+    let Some(format) = LegacyFormat::from_extension(kind) else {
+        return Outcome::bad(Status::Unsupported, "not an older Office format");
+    };
+    let outcome = match convert_legacy_office(bytes, format) {
+        Ok(o) => o,
+        Err(e) => return Outcome::bad(Status::Failed, format!("conversion failed: {e}")),
+    };
+    if negative && outcome.summary.words_converted > 0 {
+        return Outcome::bad(
+            Status::Failed,
+            format!(
+                "{} word(s) converted in a document that should be untouched",
+                outcome.summary.words_converted
+            ),
+        );
+    }
+    if outcome.was_empty {
+        return Outcome::bad(Status::NoText, "no text could be recovered from the file");
+    }
+    // Hand the document we just wrote to the full Office check. If it is not a
+    // readable Office file, or converting it again changes anything, that is a
+    // defect in us and not in the original.
+    match check_office(&outcome.document, true) {
+        o if o.status == Status::Failed || o.status == Status::Panicked => Outcome::bad(
+            o.status,
+            format!("the document we wrote is not sound: {}", o.detail),
+        ),
+        _ => Outcome::ok(outcome.summary),
     }
 }
 

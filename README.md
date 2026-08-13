@@ -98,7 +98,7 @@ Your original is never overwritten unless you type `--in-place`.
 | `.txt` `.csv` `.md` `.json` | Converted. Windows-1252 detected automatically — which is what legacy Bangla files usually are |
 | `.docx` `.xlsx` `.pptx` | Converted **inside the document**. Formatting, tables and images untouched. Includes SmartArt, charts, speaker notes and comments |
 | `.pdf` | **Read-only, best effort.** Text extracted and converted; layout is lost |
-| Older `.doc` `.xls` `.ppt` | Not supported — save as the newer format first |
+| Older `.doc` `.xls` `.ppt` | Converted into a **new** `.docx`, `.xlsx` or `.pptx` beside the original. **Text only** — these formats hold no formatting we can carry, and no font information, so accuracy matches plain text rather than the higher figure above |
 
 Verified across **every one of 2,316 documents** in a real archive — not a sample.
 Word count and whitespace preserved, every archive entry intact, no legacy font left
@@ -288,8 +288,15 @@ is in `.github/workflows/release.yml`.
 ## Known limitations
 
 - Installers are **not signed**; the first launch warns.
-- Older `.doc`, `.xls`, `.ppt` are not supported.
-- **PDF layout is lost**, and quality varies widely.
+- Older `.doc`, `.xls`, `.ppt` are read, but **only their text**. Formatting,
+  tables and images are not carried across, and because these formats record no
+  font, the conversion is decided from the words alone — the same accuracy as a
+  plain text file, not the font-gated accuracy quoted for `.docx`.
+- **PDF layout is lost**, and quality varies widely. Text is joined into real
+  lines, but headings, columns and tables are not recovered: measured on 80
+  documents, 3 had tables whose rows cannot be reconstructed, so a figure may
+  appear away from the row it belongs to. Check any converted table against the
+  original.
 - The interface is **English only** for now. Every string sits in one table, so
   Bangla is a translation rather than a rebuild.
 - Tuned for **SutonnyMJ and SutonnyOMJ**. Other legacy fonts — Boishakhi,

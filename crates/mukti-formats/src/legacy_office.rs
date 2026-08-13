@@ -121,12 +121,50 @@ pub fn convert_legacy_office(bytes: &[u8], format: LegacyFormat) -> Result<Legac
         _ => write_docx(&converted),
     }?;
 
+    let (document, summary) = settle(bytes, summary)?;
     Ok(LegacyOutcome {
-        document: bytes,
+        document,
         summary,
         blocks,
         was_empty,
     })
+}
+
+/// The font a converted document asks for. The same one the command-line tool
+/// and the app use, so all three produce identical documents.
+const UNICODE_FONT: &str = "Nirmala UI";
+
+/// Run the finished document through the ordinary Office converter once, so
+/// what comes out cannot be improved by converting it again.
+///
+/// **Why this is needed.** The text of an old file is classified all at once,
+/// while the Office rewriter classifies a paragraph at a time. Context changes
+/// the verdict, so the two can disagree — and they did, on one document in the
+/// archive: the `.docx` we had just written still contained a word the Office
+/// pass would convert. That breaks the invariant this project cares most about,
+/// that converting twice is the same as converting once, and a user who
+/// converted their `.doc` and then converted the result would have seen the file
+/// change again.
+///
+/// Running the Office pass here makes the output a fixed point by construction.
+/// It costs one extra pass over a document we already hold in memory, and it
+/// reuses the converter that is already property-tested for idempotence rather
+/// than adding a second opinion about what a legacy word is.
+fn settle(bytes: Vec<u8>, mut summary: Summary) -> Result<(Vec<u8>, Summary), String> {
+    match crate::office::convert_office(&bytes, UNICODE_FONT) {
+        Ok((settled, second)) => {
+            // The second pass judges the same words again, so only what it
+            // *changed* is new; everything else was already counted.
+            summary.words_converted += second.words_converted;
+            summary.words_untouched = summary
+                .words_untouched
+                .saturating_sub(second.words_converted);
+            Ok((settled, summary))
+        }
+        // If the document we just wrote cannot be read back, that is worth
+        // knowing about rather than papering over.
+        Err(e) => Err(format!("the converted document could not be re-read: {e}")),
+    }
 }
 
 /// Convert every text run on every slide, keeping titles apart from bodies.
