@@ -31,7 +31,7 @@ pub static PRE_MAP: &[(&str, &str)] = &[
 // 3 regex-only key(s) from PRE_MAP are handled in
 // `normalise_whitespace()` instead: [' +', '\n +', ' +\n']
 
-/// The main Bijoy glyph table. 188 entries, longest-first.
+/// The main Bijoy glyph table. 190 entries, longest-first.
 pub static CONVERSION_MAP: &[(&str, &str)] = &[
     ("Av", "আ"),
     ("A", "অ"),
