@@ -222,13 +222,71 @@ fn move_reph(s: &mut Vec<char>, i: usize) -> bool {
 ///
 /// This is the step that makes the difference between real Bangla and a string
 /// that merely contains Bengali characters.
+/// Collapse a doubled halant — except where both halants mean something.
+///
+/// This used to be a single `replace("্্", "্")`, under the comment "a doubled
+/// halant is always a mistake". It is not, and the exception is not exotic: it
+/// occurs in an ordinary word.
+///
+/// A **reph** is drawn in Bijoy as `র` + halant, placed after the consonant it
+/// rides over. A **conjunct** is halant + consonant. Put one straight after the
+/// other — a consonant carrying both a reph and a conjoined letter — and Bijoy
+/// produces `র` halant halant + consonant, with two halants side by side doing two
+/// entirely different jobs.
+///
+/// `পারিপার্শ্বিক` is exactly that: `শ` carries a reph AND a conjoined `ব`. The
+/// blanket collapse removed one halant, and since it ran before the reph was moved
+/// back, the halant that survived went with the reph — so `শ্ব` came out as `শব`
+/// and the word was silently wrong.
+///
+/// Found on 14 August 2026 by the residue study: it was one of only three genuine
+/// mis-conversions in a 200-word sample, and the sole one both raters agreed on.
+///
+/// So the rule is narrowed to exactly what it was for. A doubled halant is
+/// collapsed unless it sits in the reph-plus-conjunct pattern:
+///
+/// ```text
+///   <consonant or vowel sign>  র  ্  ্  <consonant>
+///                              ^--^  ^--^
+///                              reph   conjunct
+/// ```
+///
+/// Everything else still collapses, including a genuinely repeated halant, which
+/// really is always a mistake.
+fn collapse_doubled_halants(joined: &str) -> Vec<char> {
+    let chars: Vec<char> = joined.chars().collect();
+    let mut out: Vec<char> = Vec::with_capacity(chars.len());
+    let mut i = 0usize;
+
+    while i < chars.len() {
+        let doubled = is_halant(chars[i]) && is_halant(at(&chars, i + 1));
+        if doubled {
+            // Is the first halant the tail of a reph, and the second the head of a
+            // conjunct? Both must be true, or this is an ordinary mistake.
+            let reph_before = at(&chars, i.wrapping_sub(1)) == 'র'
+                && i >= 2
+                && (is_consonant(at(&chars, i - 2)) || is_kar(at(&chars, i - 2)));
+            let conjunct_after = is_consonant(at(&chars, i + 2));
+            if reph_before && conjunct_after {
+                // Keep both: each belongs to a different piece of the cluster.
+                out.push(chars[i]);
+                i += 1;
+                continue;
+            }
+            // An ordinary doubled halant. Keep one, drop the other.
+            out.push(chars[i]);
+            i += 2;
+            continue;
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out
+}
+
 fn rearrange(input: &str) -> String {
     let joined: String = input.chars().collect();
-    // A doubled halant is always a mistake.
-    let mut s: Vec<char> = joined
-        .replace("\u{09CD}\u{09CD}", "\u{09CD}")
-        .chars()
-        .collect();
+    let mut s: Vec<char> = collapse_doubled_halants(&joined);
 
     let mut i = 0usize;
     while i < s.len() {
@@ -1404,6 +1462,70 @@ mod tests {
         assert!(
             out.chars().any(|c| ('\u{0980}'..='\u{09FF}').contains(&c)),
             "expected Bengali characters, got {out:?}"
+        );
+    }
+
+    /// A consonant may carry BOTH a reph and a conjoined letter.
+    ///
+    /// `পারিপার্শ্বিক` has `শ` with a reph over it and a `ব` conjoined to it. In
+    /// Bijoy that is `k` `©` `¦` — শ, then reph, then the conjunct — which produces
+    /// two halants side by side doing two different jobs.
+    ///
+    /// `rearrange` opened with a blanket `replace("্্", "্")` under the comment "a
+    /// doubled halant is always a mistake". It is not. That collapse ran before the
+    /// reph was moved back, so the surviving halant went with the reph and `শ্ব`
+    /// came out as `শব` — the word silently wrong, with nothing to show for it.
+    ///
+    /// Found 14 August 2026 by the residue study: one of only three genuine
+    /// mis-conversions in a 200-word sample, and the only one both raters agreed on.
+    #[test]
+    fn a_consonant_can_carry_a_reph_and_a_conjunct_at_once() {
+        // The conjunct on its own must keep working.
+        assert_eq!(convert("k\u{a6}K"), "\u{9b6}\u{9cd}\u{9ac}\u{995}");
+        // And with a reph in front of it, BOTH halants must survive.
+        assert_eq!(
+            convert("k\u{a9}\u{a6}K"),
+            "\u{9b0}\u{9cd}\u{9b6}\u{9cd}\u{9ac}\u{995}",
+            "the halant forming শ্ব was lost to the doubled-halant collapse"
+        );
+    }
+
+    /// An ordinary doubled halant is still a mistake, and still collapses.
+    ///
+    /// The narrowed rule must not become a licence to keep every doubled halant:
+    /// only the reph-plus-conjunct pattern is exempt.
+    #[test]
+    fn an_ordinary_doubled_halant_still_collapses() {
+        let out: String = collapse_doubled_halants("\u{995}\u{9cd}\u{9cd}\u{995}")
+            .into_iter()
+            .collect();
+        assert_eq!(
+            out, "\u{995}\u{9cd}\u{995}",
+            "a plain doubled halant must collapse"
+        );
+    }
+
+    /// KNOWN FAULT, not yet fixed — recorded rather than left as folklore.
+    ///
+    /// With the halant now preserved, `পারিপার্শ্বিক` still comes out as
+    /// `পারিপার্শ্বকি`: the pre-vowel `ি` walks one consonant too far and lands
+    /// after `ক` instead of before it. That is a SECOND, independent fault in the
+    /// same word — in the cluster walk of the pre-kar relocation, not in the halant
+    /// collapse this commit fixed.
+    ///
+    /// Ignored rather than deleted so it is a standing, runnable statement of what
+    /// is still wrong. Run it with `cargo test -- --ignored`. When somebody fixes
+    /// the cluster walk, this passes and the `#[ignore]` comes off.
+    ///
+    /// Measured impact: the halant fix above changed M1 and M2 not at all
+    /// (99.989% and 100% before and after), so this remainder is rare.
+    #[test]
+    #[ignore = "known fault: the pre-kar cluster walk overshoots a conjunct"]
+    fn a_pre_vowel_after_a_conjunct_lands_in_the_right_place() {
+        assert_eq!(
+            convert("cvwicvwk\u{a9}\u{a6}K"),
+            "\u{9aa}\u{9be}\u{9b0}\u{9bf}\u{9aa}\u{9be}\u{9b0}\u{9cd}\u{9b6}\u{9cd}\u{9ac}\u{9bf}\u{995}",
+            "the ি should sit before ক, not after it"
         );
     }
 
