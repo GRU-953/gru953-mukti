@@ -87,7 +87,8 @@ const TEXT = {
     theme: "Dark",
     themeLight: "Light",
     placeholder: "Paste text here, or drop a file anywhere on this window.",
-    drophint: "Or drop a file on the window: text, Word, Excel, PowerPoint or PDF.",
+    drophint:
+      "Or drop a file on the window: text, Word, Excel, PowerPoint or PDF \u2014 including the older .doc, .xls and .ppt.",
     empty: "The converted text will appear here.",
 
     // Words that prefix the status line, so colour is never the only signal.
@@ -199,6 +200,15 @@ function draw(result) {
   outHint.hidden = editable;
   if (!editable) {
     outHint.textContent = result.kind === "pdf" ? t("pdfReadonly") : t("readonly");
+  }
+
+  // Older .doc, .xls and .ppt files come with a limitation worth saying out
+  // loud: only the words could be recovered, and the conversion decision was
+  // made without any font to go on. The wording comes from Rust, beside the
+  // conversion, so the two cannot describe it differently.
+  if (result.notice) {
+    outHint.hidden = false;
+    outHint.textContent = result.notice;
   }
 
   if (result.unreadable !== null && result.unreadable !== undefined) {

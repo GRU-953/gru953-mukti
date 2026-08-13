@@ -85,6 +85,10 @@ struct Conversion {
     /// Set when a PDF yielded no recoverable text at all, with the count of
     /// pieces that had to be skipped. 132 of 775 real PDFs do this.
     unreadable: Option<usize>,
+    /// A limitation the person needs to know about this particular file, in
+    /// finished English. Set for the older `.doc`, `.xls` and `.ppt` formats,
+    /// which carry no formatting and no font information.
+    notice: Option<String>,
 }
 
 /// What was converted. Decides what the window may offer to do next.
@@ -167,6 +171,7 @@ fn convert_str(input: &str, encoding: Option<String>) -> Conversion {
         kind: Kindness::Text,
         filename: None,
         unreadable: None,
+        notice: None,
     }
 }
 
@@ -223,6 +228,32 @@ fn convert_path(path: &Path, state: &State) -> Result<Conversion, String> {
             c.kind = Kindness::Document;
             c
         }
+        "doc" | "xls" | "ppt" => {
+            let format = mukti_formats::LegacyFormat::from_extension(&extension)
+                .expect("the match arm above names exactly these three");
+            let outcome = mukti_formats::convert_legacy_office(&bytes, format).map_err(|e| {
+                format!(
+                    "That older {extension} file could not be read: {e}. It may be damaged, or it may be a newer file that has been given an old name."
+                )
+            })?;
+            // Read the text back out of what we just wrote, so what is shown is
+            // what will be saved rather than a separate guess at it.
+            let text = mukti_formats::runs(std::io::Cursor::new(&outcome.document))
+                .map(|runs| runs.iter().map(|r| r.text.as_str()).collect::<String>())
+                .unwrap_or_default();
+            *state.last.lock().expect("state lock") = Some(Payload::Document {
+                bytes: outcome.document,
+                extension: format.modern_extension().to_owned(),
+            });
+            let mut c = convert_str(&text, None);
+            c.converted = outcome.summary.words_converted;
+            c.untouched = outcome.summary.words_untouched;
+            c.kind = Kindness::Document;
+            // The one thing a person must be told about these files: only the
+            // words came across, and the decision was made without the font.
+            c.notice = Some(mukti_formats::PLAIN_TEXT_ONLY_NOTICE.to_owned());
+            c
+        }
         "pdf" => {
             let (text, summary) = mukti_formats::convert_pdf_to_text(&bytes)
                 .map_err(|e| format!("That PDF could not be read: {e}. Some PDFs are images of pages rather than text."))?;
@@ -266,10 +297,12 @@ fn open_and_convert(
         .add_filter(
             "Everything Mukti can read",
             &[
-                "txt", "csv", "tsv", "md", "json", "docx", "xlsx", "pptx", "pdf",
+                "txt", "csv", "tsv", "md", "json", "docx", "xlsx", "pptx", "doc", "xls", "ppt",
+                "pdf",
             ],
         )
         .add_filter("Word, Excel, PowerPoint", &["docx", "xlsx", "pptx"])
+        .add_filter("Older Word, Excel, PowerPoint", &["doc", "xls", "ppt"])
         .add_filter("PDF", &["pdf"])
         .add_filter("Plain text", &["txt", "csv", "tsv", "md", "json"])
         .blocking_pick_file();
