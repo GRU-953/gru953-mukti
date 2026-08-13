@@ -2100,10 +2100,12 @@ name = "mukti-app"
 version = "0.4.0"
 dependencies = [
  "gru953-mukti",
+ "mukti-formats",
  "serde",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
+ "zip",
 ]
 
 [[package]]

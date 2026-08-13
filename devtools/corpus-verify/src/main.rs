@@ -190,18 +190,18 @@ fn run() -> Result<usize, String> {
     files.sort();
 
     if let Some(only) = &cfg.only {
-        files.retain(|p| {
-            extension(p).is_some_and(|e| only.contains(&e))
-        });
+        files.retain(|p| extension(p).is_some_and(|e| only.contains(&e)));
     }
 
     // Refuse to write an empty report over a real one. corpus-label learned this
     // the expensive way: pointed at a moved directory it truncated a 152 MB
     // labelled set to a bare header, silently, and exited successfully.
     if files.is_empty() {
-        return Err("found no files to check — is the path right? Refusing to write an \
+        return Err(
+            "found no files to check — is the path right? Refusing to write an \
                     empty report over an existing one."
-            .into());
+                .into(),
+        );
     }
 
     let already: std::collections::HashSet<String> = if cfg.resume && cfg.out.exists() {
@@ -227,8 +227,11 @@ fn run() -> Result<usize, String> {
         .open(&cfg.out)
         .map_err(|e| format!("opening {}: {e}", cfg.out.display()))?;
     if fresh {
-        writeln!(report, "path\tkind\tstatus\tconverted\tuntouched\tfonts\tdetail")
-            .map_err(|e| e.to_string())?;
+        writeln!(
+            report,
+            "path\tkind\tstatus\tconverted\tuntouched\tfonts\tdetail"
+        )
+        .map_err(|e| e.to_string())?;
     }
 
     let total = files.len();
@@ -262,7 +265,9 @@ fn run() -> Result<usize, String> {
                 )
             });
 
-        *tally.entry((kind.clone(), outcome.status.as_str())).or_default() += 1;
+        *tally
+            .entry((kind.clone(), outcome.status.as_str()))
+            .or_default() += 1;
         if outcome.status.is_defect() {
             defects += 1;
             println!("  {} {}  {}", outcome.status.as_str(), key, outcome.detail);
@@ -296,10 +301,7 @@ fn run() -> Result<usize, String> {
     }
     println!("{:-<62}", "");
     println!("Report: {}", cfg.out.display());
-    println!(
-        "\n{} file(s) checked, {} defect(s).",
-        done, defects
-    );
+    println!("\n{} file(s) checked, {} defect(s).", done, defects);
     Ok(defects)
 }
 
@@ -407,10 +409,7 @@ fn check_office(bytes: &[u8], negative: bool) -> Outcome {
     //    is that the content does not change, and that is what is checked.
     if summary.words_converted == 0 && summary.fonts_changed == 0 {
         if let Err(why) = every_entry_identical(bytes, &out) {
-            return Outcome::bad(
-                Status::Failed,
-                format!("nothing was converted, yet {why}"),
-            );
+            return Outcome::bad(Status::Failed, format!("nothing was converted, yet {why}"));
         }
     }
 
@@ -649,9 +648,7 @@ fn no_legacy_font_left(after: &[u8]) -> Result<(), String> {
                 Event::Text(e) if metadata => {
                     let text = e.decode().unwrap_or_default();
                     if is_exactly_legacy_font(&text) {
-                        return Err(format!(
-                            "a legacy font name survives as text in {name}"
-                        ));
+                        return Err(format!("a legacy font name survives as text in {name}"));
                     }
                 }
                 _ => {}

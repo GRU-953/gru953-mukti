@@ -17,9 +17,17 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 gru953-mukti = { path = "../mukti-core", version = "0.4.0" }
+# Word, Excel, PowerPoint and PDF. The window has claimed to handle these since
+# 0.3.0 and could not: without this dependency every file was read as plain text,
+# so a .docx arrived as mojibake.
+mukti-formats = { path = "../mukti-formats", version = "0.4.0" }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+# Building a .docx by hand in a test, so no fixture file is needed on disk.
+zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [lints]
 workspace = true
