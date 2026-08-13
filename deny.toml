@@ -27,6 +27,13 @@ all-features = true
 [advisories]
 version = 2
 yanked = "deny"
+# Every unsoundness notice, wherever in the tree it comes from, must fail the
+# build unless it is named below. Before
+# 14 August 2026 this line was missing, so RUSTSEC-2024-0429 — a real
+# unsoundness, not an unmaintained notice — passed the "blocking" gate in
+# silence. Found by counting the advisories the audit reported (17) against the
+# entries recorded here (16).
+unsound = "all"
 
 # A published SECURITY VULNERABILITY fails the build, always. Nothing below is a
 # vulnerability — every entry is an "unmaintained crate" notice, meaning nobody
@@ -42,6 +49,20 @@ yanked = "deny"
 # published after the original hand audit. Those were fixed by upgrading, not
 # ignored. That is the difference this file is for.
 ignore = [
+    # RUSTSEC-2024-0429 — unsoundness in `glib`'s `VariantStrIter`, whose
+    # `Iterator` and `DoubleEndedIterator` impls can hand out overlapping
+    # references. **Not an unmaintained notice: a soundness bug.**
+    #
+    # Reached only through GTK3, which is Tauri's Linux web-view backend, so it
+    # is absent from the macOS and Windows builds entirely. Mukti never
+    # constructs a `VariantStrIter` itself; it would have to be reached through
+    # GTK's own internals. The version is pinned by Tauri, so it cannot be
+    # bumped here without forking the whole GTK stack.
+    #
+    # What would change this: Tauri moving to GTK4, or glib publishing a fixed
+    # 0.18.x. Re-check at every release.
+    "RUSTSEC-2024-0429",
+
     # ---------------------------------------------------------------------
     # The GTK3 bindings — ten crates, Linux only
     # ---------------------------------------------------------------------
