@@ -58,6 +58,11 @@ fn run() -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let cfg = Config::parse()?;
     let mut gates = Gates::default();
 
+    if let Some(n) = cfg.residue_sample {
+        residue_sample(&cfg, n)?;
+        return Ok(Vec::new());
+    }
+
     println!("GRU953 Mukti — accuracy report");
     println!("================================\n");
 
@@ -316,6 +321,122 @@ fn m3_dictionary_on_real_documents(cfg: &Config) -> Result<(), Box<dyn std::erro
 // ---------------------------------------------------------------------------
 // M4 — adversarial
 // ---------------------------------------------------------------------------
+
+/// Draw a random sample of M3's residue, for classification by hand.
+///
+/// # Why this exists
+///
+/// M3 reports how many converted words are found in the dictionary. It is a
+/// **floor**, not an accuracy, because names, places, acronyms and rare words are
+/// in no word list — a perfectly converted word can be missing from one. So nobody
+/// knows how much of the residue is a genuine mis-conversion and how much is simply
+/// a word no dictionary holds, and until somebody looks, the figure cannot honestly
+/// be quoted in either direction.
+///
+/// This draws the sample that answers it. It does **not** answer it: a person reads
+/// the pairs and judges them. That is the whole point — no program can tell a
+/// Bangladeshi surname from a mis-converted word, and one that claimed to would
+/// only be the converter marking its own homework.
+///
+/// # Why the seed matters
+///
+/// Every residue word gets an equal chance, and the seed is written into the file.
+/// Re-running with the same seed draws the same sample, so the resulting figure can
+/// be checked by somebody else rather than taken on trust. A sample nobody can
+/// reproduce is an anecdote with a percentage attached.
+///
+/// The generator is a plain SplitMix64: eight lines, no dependency, and entirely
+/// adequate for deciding which words to look at.
+///
+/// # What comes out
+///
+/// A TSV of source-and-output pairs in `local/`, because it is real text from
+/// private documents. Only counts derived from it may ever be published.
+fn residue_sample(cfg: &Config, want: usize) -> Result<(), Box<dyn std::error::Error>> {
+    let bytes = fs::read(&cfg.extended_fst)?;
+    let wide = fst::Set::new(bytes)?;
+
+    // Exactly M3's residue: same split, same label, same trimming, same dictionary
+    // test. If this drifted from M3 the sample would describe a different
+    // population from the figure it is meant to explain.
+    let mut residue: Vec<(String, String)> = Vec::new();
+    for row in rows(&cfg.labels)? {
+        let Row {
+            split,
+            label,
+            token,
+            ..
+        } = row?;
+        if split != cfg.split || label != "legacy" {
+            continue;
+        }
+        let converted = convert(&token);
+        let word = trim_to_bengali(&converted);
+        if word.is_empty() {
+            continue;
+        }
+        if !wide.contains(normalise_nukta(word)) {
+            residue.push((token, word.to_owned()));
+        }
+    }
+
+    let population = residue.len();
+    if population == 0 {
+        return Err("the residue is empty — there is nothing to sample".into());
+    }
+
+    let mut state = cfg.seed;
+    let mut next_u64 = move || {
+        state = state.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = state;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^ (z >> 31)
+    };
+
+    // Reservoir sampling: one pass, every member equally likely, and no need to
+    // shuffle a hundred thousand words to take two hundred of them.
+    let take = want.min(population);
+    let mut chosen: Vec<(String, String)> = Vec::with_capacity(take);
+    for (i, item) in residue.into_iter().enumerate() {
+        if i < take {
+            chosen.push(item);
+        } else {
+            let j = (next_u64() % (i as u64 + 1)) as usize;
+            if j < take {
+                chosen[j] = item;
+            }
+        }
+    }
+
+    let out = PathBuf::from("local/residue-sample.tsv");
+    let mut text = String::new();
+    text.push_str(&format!(
+        "# M3 residue sample. Population {population}, sample {take}, seed {}, split {}.\n",
+        cfg.seed, cfg.split
+    ));
+    text.push_str(
+        "# Real text from private documents: this file never leaves local/. Only counts may.\n\
+         # Classify each row as exactly ONE of:\n\
+         #   A = name   B = rare or technical word   C = MIS-CONVERSION\n\
+         #   D = the source was not a word   E = cannot judge\n\
+         n\tsource\toutput\tclass\n",
+    );
+    for (i, (source, output)) in chosen.iter().enumerate() {
+        text.push_str(&format!("{}\t{source}\t{output}\t\n", i + 1));
+    }
+    fs::write(&out, text)?;
+
+    println!("M3 residue sample");
+    println!("=================\n");
+    println!("  Residue population  {}", thousands(population));
+    println!("  Sampled             {take}");
+    println!("  Seed                {}", cfg.seed);
+    println!("  Split               {}", cfg.split);
+    println!("\n  Written to {}", out.display());
+    println!("  Fill in the `class` column, then compute the corrected estimate.");
+    Ok(())
+}
 
 /// The converter must not quietly tidy up spelling.
 ///
@@ -634,6 +755,12 @@ struct Config {
     /// Which half of the labelled set D2 reports on. `tune` while adjusting
     /// anything; `test` only when the figure is going to be quoted.
     split: String,
+    /// Draw a sample of M3's residue for hand classification, instead of
+    /// reporting. `None` means report as usual.
+    residue_sample: Option<usize>,
+    /// The seed the sample is drawn with. Recorded so the same sample can be
+    /// drawn again — a sample nobody else can reproduce is an anecdote.
+    seed: u64,
 }
 
 impl Config {
@@ -642,6 +769,8 @@ impl Config {
         let mut labels = PathBuf::from("local/labelled-corpus.tsv");
         let mut extended_fst = PathBuf::from("local/extended-words.fst");
         let mut split = String::from("test");
+        let mut residue_sample = None;
+        let mut seed = 20_260_813u64;
         let mut it = std::env::args().skip(1);
         while let Some(arg) = it.next() {
             match arg.as_str() {
@@ -649,6 +778,14 @@ impl Config {
                 "--labels" => labels = it.next().map(PathBuf::from).unwrap_or(labels),
                 "--words" => extended_fst = it.next().map(PathBuf::from).unwrap_or(extended_fst),
                 "--split" => split = it.next().unwrap_or(split),
+                "--residue-sample" => {
+                    let n = it.next().ok_or("--residue-sample needs a number")?;
+                    residue_sample = Some(n.parse().map_err(|_| format!("not a number: {n}"))?);
+                }
+                "--seed" => {
+                    let n = it.next().ok_or("--seed needs a number")?;
+                    seed = n.parse().map_err(|_| format!("not a number: {n}"))?;
+                }
                 "--report" => {}
                 other => return Err(format!("unknown argument {other:?}")),
             }
@@ -658,6 +795,8 @@ impl Config {
             labels,
             extended_fst,
             split,
+            residue_sample,
+            seed,
         })
     }
 }

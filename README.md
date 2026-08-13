@@ -172,24 +172,55 @@ an English run *is not*. No hand-labelling, and the code under test is never
 asked what it thinks. Runs declaring no font are excluded rather than guessed
 at, as are runs whose declared font contradicts their own bytes.
 
-**One figure is a lower bound, not an accuracy, and is kept out of the table for
-that reason.** Over real documents, **94.0%** of converted words are found in the
-dictionary — 177,071 words, measured 13 August 2026.
+**Accuracy on real documents: about 99.9%, and here is how that is known.**
 
-Earlier versions of this page said 78.4%. That was wrong: it came from a
-superseded answer key and was never updated when the final one was built. The
-re-measurement above settles it.
+The direct measurement is that **94.015%** of converted words, over real
+documents, are found in the dictionary (177,071 words). That is a **floor**, not an
+accuracy: names, places, acronyms and rare words are in no word list, so a
+perfectly converted word can be missing from one. Earlier versions of this page
+reported 78.4%, which was simply wrong — it came from a superseded answer key.
 
-**But 94.0% is still not an accuracy, and 6% is not an error rate.** Names,
-places, acronyms and rare words are in no word list, so a perfectly converted word
-can be missing from it. The figure is a floor on how well conversion does, not a
-measure of it.
+So the remaining **5.985%** (10,597 words) was sampled and read. 200 of them were
+drawn at random with a recorded seed, so the same sample can be drawn again, and
+each was classified by hand with the original Bijoy shown beside the output —
+because the Bengali alone cannot separate "rare word" from "wrong word".
 
-What would make it quotable is one more piece of work: taking a sample of the
-words *not* found and classifying each by hand as a name, a rare word, or a
-genuine mis-conversion. Until that is done, the honest thing is to publish the
-number with what it does and does not mean attached — which is what this paragraph
-is for.
+| What the residue actually contains | of 200 |
+|---|---|
+| The output is exactly what the source encodes | 187 |
+| **A genuine mis-conversion** | **3** |
+| The source was not a word at all — a fragment or a stray symbol | 4 |
+| A name | 1 |
+| Could not be judged honestly | 5 |
+
+Most of the residue is compound words, pairs joined by a slash or hyphen,
+transliterated English, and — most of all — **source misspellings that Mukti
+faithfully preserved**, which is exactly what it is supposed to do.
+
+Correcting the floor by the measured mis-conversion rate:
+
+| | Estimate |
+|---|---|
+| Treating the five unjudgeable cases as correct | **99.908%** [99.737, 99.969] |
+| Treating all five as errors | **99.756%** [99.530, 99.875] |
+
+**Two checks on that.** A second rater, given only the word pairs and the
+classification rules and no knowledge of this project, independently found
+**exactly 3** mis-conversions — a partly different three, giving 99.909%. Raw
+agreement was 96% (Cohen's κ 0.607, depressed by how lopsided the categories are
+rather than by real disagreement). And the round-trip figure of 99.989% is an
+*upper* bound by construction: every estimate here sits below it, which is what a
+consistent pair of measurements must do.
+
+**What this still cannot tell you.** At 200 words the interval is roughly ±3
+points near these rates, so this settles "is the residue mostly names or mostly
+errors?" and will not support finer ranking. All 3 confirmed faults are the same
+kind — the **reph (`র্`) or a vowel sign landing on the wrong consonant**, plus one
+dropped character — which is a specific thing to fix rather than a vague error
+rate. And one honest note on method: the classification rules had to be clarified
+mid-study, because the corpus is full of source misspellings and reproducing one
+faithfully is correct behaviour, not an error. That clarification moved the result
+*upwards*, so it is recorded here rather than left implicit.
 
 **PDF quality varies widely.** Across 60 legacy-font PDFs: 28 good (70%+ real
 words), 19 fair, 7 poor, 6 produced nothing. Median 71.3%.

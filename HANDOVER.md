@@ -132,9 +132,26 @@ Two honest caveats, both of which should stay attached to these numbers:
 - **Round-trip has a blind spot by construction.** If the encoder and decoder
   share a mistake, the text still comes back identical. That is why the real
   document measurement exists.
-- **One figure has been withdrawn** (13 August 2026). This document previously
-  said 78.4% of converted words are found in the dictionary, over real documents.
-  Two things are wrong with that.
+- **DONE, 13 August 2026 — the residue was sampled, and this is no longer the
+  most valuable open task.** Estimated accuracy on real documents is **99.9%**
+  (conservative floor 99.76%). The method, the classification counts, the
+  independent second rating and the confidence intervals are all in `README.md`
+  under Accuracy. The three confirmed faults are all the same kind: the reph
+  (`র্`) or a vowel sign landing on the wrong consonant, plus one dropped
+  character. That is a specific defect class to attack, and `LESSONS.md` §3
+  already records that this is exactly where guards go wrong.
+
+  Reproduce the sample with:
+
+  ```bash
+  cargo run --release -p eval -- --corpus "<word list>" --residue-sample 200
+  ```
+
+  The seed is recorded in the output file, so the same 200 words come back.
+
+- **The withdrawn figure, and why it was withdrawn** (kept for the record). This
+  document previously said 78.4% of converted words are found in the dictionary,
+  over real documents. Two things were wrong with that.
 
   It came from a **superseded answer key**. The final run, on the larger key
   actually used for every other figure here, gave **93.8%** — and that number was
