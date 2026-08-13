@@ -601,9 +601,13 @@ pub struct Summary {
 /// apart; a verifier with a fourth would be able to pass while the converter
 /// failed, which is worse than having no verifier.
 pub const LEGACY_FONTS: &[&str] = &[
-    "sutonnymj",
-    "sutonnyomj",
-    "sutonnyemj",
+    // The family prefix, not the three exact names. Listing only `sutonnymj`,
+    // `sutonnyomj` and `sutonnyemj` silently missed every other variant in the
+    // archive — `SutonnyBanglaMJ`, `SutonnyBanglaMJBold`, `SutonnyUniBanglaOMJ`
+    // and `SutonnySushreeMJ` — because matching is by substring and none of
+    // those *contains* one of the three. Found on 14 August 2026 by making the
+    // PDF reader's list a tested subset of this one.
+    "sutonny",
     "boishakhi",
     "bornosoft",
     "sulekha",

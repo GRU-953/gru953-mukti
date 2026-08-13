@@ -46,6 +46,48 @@ use gru953_mukti::encoding::from_windows_1252;
 /// occasionally split a word or join two.
 const SPACE_GAP: f64 = 180.0;
 
+/// The fonts a PDF may be decoded as Bijoy on the strength of its name alone.
+///
+/// **Deliberately shorter than [`crate::office::LEGACY_FONTS`], and the
+/// difference is the point.** The two lists answer different questions.
+///
+/// In a Word file, the font decides only whether a word is *offered* to the
+/// classifier, and the classifier is the real gate — it refuses outright to
+/// touch anything already containing Unicode Bengali. A font wrongly listed
+/// there costs a font rename and nothing else.
+///
+/// In a PDF there is no such gate. The font name is the whole authority: match
+/// it, and the bytes are decoded as Windows-1252 and converted with no second
+/// opinion. A font wrongly listed here turns readable text into Bengali-shaped
+/// nonsense, which is this project's worst failure mode.
+///
+/// So this list holds only fonts whose text is *known* to be Bijoy-encoded.
+/// `NikoshBAN` and `Ekushey` sit in the Office list and are kept out of this one:
+/// Nikosh is Bangladesh's standard **Unicode** font, and the one PDF in the
+/// measurement archive that embeds `NikoshBAN` yields no Bijoy-looking text at
+/// all. Ekushey is unresolved either way. Neither may be added here without
+/// evidence from the font itself — LESSONS §3 is about exactly that mistake.
+///
+/// A test below keeps this a subset of the Office list, so the two can only ever
+/// drift in the safe direction.
+const CERTAIN_LEGACY_FONTS: &[&str] = &[
+    // The whole Sutonny family, by the shared prefix.
+    //
+    // Narrowing this to `sutonnymj`/`sutonnyomj`/`sutonnyemj` was tried and
+    // **measured**: it lost four real variants in the archive —
+    // `SutonnyBanglaMJ`, `SutonnyBanglaMJBold`, `SutonnyUniBanglaOMJ` and
+    // `SutonnySushreeMJ` — across 26 font references, and two PDFs stopped
+    // converting. All four carry the `MJ`/`OMJ` suffix that marks a Bijoy
+    // layout, so they belong here. The prefix is what catches the family.
+    "sutonny",
+    "boishakhi",
+    "sulekha",
+    "bornosoft",
+    "chandrabati",
+    "adorsholipi",
+    "modhumatimj",
+];
+
 /// What we can do with text drawn in a particular font.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum FontKind {
@@ -72,16 +114,7 @@ fn classify_font(dictionary: &lopdf::Dictionary) -> FontKind {
         .map(|n| String::from_utf8_lossy(n).to_string())
         .unwrap_or_default();
     let lower = base.to_lowercase();
-    let legacy = [
-        "sutonny",
-        "boishakhi",
-        "sulekha",
-        "bornosoft",
-        "chandrabati",
-        "adorsholipi",
-    ]
-    .iter()
-    .any(|f| lower.contains(f));
+    let legacy = CERTAIN_LEGACY_FONTS.iter().any(|f| lower.contains(f));
 
     // A simple font with a named base encoding is byte-addressed, and that is
     // the only case we can read. Anything else — a Differences array, an
@@ -578,6 +611,25 @@ mod tests {
         convert_pdf_to_text(&bytes)
             .expect("the test document should read")
             .0
+    }
+
+    #[test]
+    fn the_pdf_font_list_is_a_subset_of_the_office_one() {
+        // The PDF path trusts a font absolutely, so it may be stricter than the
+        // Office path but must never be looser: a font it converts on sight has
+        // to be one the rest of the project already agrees is legacy. Without
+        // this test the two lists drift apart silently, which is how they came
+        // to disagree in the first place.
+        // Every name this list matches must also match the Office list. Since
+        // both match by substring, that holds exactly when each entry here
+        // already contains an entry there.
+        for font in CERTAIN_LEGACY_FONTS {
+            assert!(
+                crate::office::is_legacy_font(font),
+                "a PDF font matching {font:?} would be converted on sight, \
+                 but the Office reader does not consider it legacy"
+            );
+        }
     }
 
     #[test]
