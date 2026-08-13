@@ -1,0 +1,18 @@
+[package]
+name = "corpus-verify"
+description = "Run every document in an archive through Mukti and check the result against invariants that must hold for all of them."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[dependencies]
+gru953-mukti = { path = "../../crates/mukti-core" }
+mukti-formats = { path = "../../crates/mukti-formats" }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[lints]
+workspace = true

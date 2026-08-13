@@ -403,7 +403,13 @@ pub struct Summary {
 }
 
 /// Legacy Bangla font names, lower-cased.
-const LEGACY_FONTS: &[&str] = &[
+///
+/// Public so that anything checking "did a legacy font survive the conversion?"
+/// asks **this** list rather than keeping its own copy. There are already two
+/// other font lists in the workspace (`pdf.rs` and `corpus-label`) that drifted
+/// apart; a verifier with a fourth would be able to pass while the converter
+/// failed, which is worse than having no verifier.
+pub const LEGACY_FONTS: &[&str] = &[
     "sutonnymj",
     "sutonnyomj",
     "sutonnyemj",
@@ -417,7 +423,8 @@ const LEGACY_FONTS: &[&str] = &[
     "ekushey",
 ];
 
-fn is_legacy_font(name: &str) -> bool {
+/// Does this font name belong to a legacy Bangla font?
+pub fn is_legacy_font(name: &str) -> bool {
     let lower = name.to_lowercase();
     LEGACY_FONTS.iter().any(|f| lower.contains(f))
 }
@@ -440,17 +447,21 @@ pub fn convert_office(
     let mut out = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let mut summary = Summary::default();
 
+    // Work out what each text or font part should become, before writing
+    // anything. Deciding first means a part that turns out not to need changing
+    // can be copied across byte-for-byte instead of rebuilt — see below.
+    let mut replacements: std::collections::BTreeMap<String, String> =
+        std::collections::BTreeMap::new();
     for i in 0..archive.len() {
-        let entry = archive.by_index(i)?;
-        let name = entry.name().to_owned();
+        let name = archive.by_index(i)?.name().to_owned();
         if !is_text_part(&name) && !is_font_part(&name) {
-            // Neither text nor fonts: copy it across exactly as it is.
-            out.raw_copy_file(entry)?;
             continue;
         }
         let mut xml = String::new();
-        let mut entry = entry;
-        std::io::Read::read_to_string(&mut entry, &mut xml)?;
+        {
+            let mut entry = archive.by_index(i)?;
+            std::io::Read::read_to_string(&mut entry, &mut xml)?;
+        }
         // A font-only part gets its names swapped and its text left alone.
         let (rewritten, part_summary) = if is_text_part(&name) {
             rewrite_part(&xml, unicode_font)?
@@ -461,12 +472,37 @@ pub fn convert_office(
         summary.words_untouched += part_summary.words_untouched;
         summary.fonts_changed += part_summary.fonts_changed;
 
-        out.start_file(
-            name,
-            zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated),
-        )?;
-        out.write_all(rewritten.as_bytes())?;
+        // Only record it if it actually changed.
+        //
+        // Reading an XML part and writing it back out again is not free of
+        // consequences even when nothing is edited: the writer re-serialises the
+        // markup and the archive re-compresses it, so an untouched part comes out
+        // as different bytes. A document with no legacy Bangla in it was
+        // therefore never returned unchanged, which is both a broken promise and
+        // a needless risk — every re-serialisation is a chance to differ from the
+        // original in some way nobody has thought to check.
+        //
+        // So a part that comes back identical is treated exactly like an image:
+        // copied through, untouched, still compressed exactly as Word left it.
+        if rewritten != xml {
+            replacements.insert(name, rewritten);
+        }
+    }
+
+    for i in 0..archive.len() {
+        let entry = archive.by_index(i)?;
+        let name = entry.name().to_owned();
+        match replacements.get(&name) {
+            None => out.raw_copy_file(entry)?,
+            Some(rewritten) => {
+                out.start_file(
+                    &name,
+                    zip::write::SimpleFileOptions::default()
+                        .compression_method(zip::CompressionMethod::Deflated),
+                )?;
+                out.write_all(rewritten.as_bytes())?;
+            }
+        }
     }
 
     Ok((out.finish()?.into_inner(), summary))
@@ -517,10 +553,11 @@ fn rewrite_part(
                 start: at,
                 end: at + len,
                 text: segment.text.to_owned(),
-                is_word: false,
+                changed: false,
             }),
             Kind::Word => {
-                let text = if verdicts[w] == Verdict::Legacy {
+                let changed = verdicts[w] == Verdict::Legacy;
+                let text = if changed {
                     summary.words_converted += 1;
                     convert(segment.text)
                 } else {
@@ -531,7 +568,7 @@ fn rewrite_part(
                     start: at,
                     end: at + len,
                     text,
-                    is_word: true,
+                    changed,
                 });
                 w += 1;
             }
@@ -689,21 +726,45 @@ fn rewrite_fonts_only(
 struct Placed {
     start: usize,
     end: usize,
-    /// The characters to emit: the converted word, or the whitespace itself.
+    /// The characters to emit: the converted word, or the original text itself.
     text: String,
-    is_word: bool,
+    /// Did conversion actually alter this piece?
+    ///
+    /// Only `true` for a word that was converted. That is the one case where the
+    /// emitted text is a different length from the original, so it can no longer
+    /// be cut at the original character positions. Everything else — untouched
+    /// words, whitespace, punctuation — keeps its exact original length and is
+    /// therefore sliced rather than moved. See `span`.
+    changed: bool,
 }
 
 /// The converted form of the characters between `from` and `to`.
 ///
-/// A word is emitted whole by the run in which it **starts**. A word split
-/// across runs by a mid-word formatting change therefore lands entirely in the
-/// first of them and the rest contribute nothing — which is right, because
-/// `Kg` + `©m~wP` is one word, `কর্মসূচি`, and it has to be written somewhere.
+/// Two cases, and the distinction is the whole point of this function.
 ///
-/// Whitespace is copied character for character from the position it occupied,
-/// so the document's spacing and line breaks survive exactly however the runs
-/// happen to be divided. Getting this wrong is not subtle: an earlier,
+/// **A piece whose text is unchanged** is copied character for character from
+/// the position it occupied, so the document's spacing, line breaks and — this
+/// is the part that was wrong until 13 August 2026 — the division of text
+/// between runs all survive exactly.
+///
+/// **A converted word is emitted whole by the run in which it starts**, and the
+/// other runs it spans contribute nothing. There is no alternative: `Kg` +
+/// `©m~wP` is one word, `কর্মসূচি`, of a different length, and it cannot be cut
+/// at the old character offsets. A word split by mid-word formatting therefore
+/// loses that internal split when it converts. That is a real cost, accepted
+/// knowingly, and it now applies **only** to words that actually change.
+///
+/// The bug this replaced: consolidation was applied to *every* word. Word splits
+/// words across runs constantly — revision marks, spell-check state, a change of
+/// language mid-word — so a document with **no legacy Bangla at all** still came
+/// back with its runs rearranged. On one real document a run holding `t` came
+/// back holding `trainng`, having stolen the rest of the word from the runs
+/// after it. Visible text was always correct, which is exactly why this survived
+/// a 300-document check that compared the joined text: joined text cannot see
+/// which run a character came from. Found by checking that a document with
+/// nothing to convert comes back byte-identical.
+///
+/// Getting the whitespace half wrong is not subtle either: an earlier,
 /// count-based version glued words together and lost newlines across a real
 /// 781-word document, taking it down to 465 words.
 fn span(pieces: &[Placed], from: usize, to: usize) -> String {
@@ -712,13 +773,14 @@ fn span(pieces: &[Placed], from: usize, to: usize) -> String {
         if piece.end <= from || piece.start >= to {
             continue;
         }
-        if piece.is_word {
-            // A word belongs to the run it starts in, and to no other.
+        if piece.changed {
+            // A converted word belongs to the run it starts in, and no other.
             if piece.start >= from {
                 out.push_str(&piece.text);
             }
         } else {
-            // Whitespace: copy exactly the part that falls inside this run.
+            // Unchanged: copy exactly the part that falls inside this run, so
+            // the original distribution across runs is preserved.
             let skip = from.saturating_sub(piece.start);
             let take = piece.end.min(to) - piece.start.max(from);
             out.extend(piece.text.chars().skip(skip).take(take));

@@ -7,6 +7,7 @@ members = [
     "crates/mukti-formats",
     "devtools/lexicon-build",
     "devtools/corpus-label",
+    "devtools/corpus-verify",
     "devtools/eval",
 ]
 
