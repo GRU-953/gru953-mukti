@@ -120,6 +120,22 @@ unidentified developer. That is because the app is not signed with a paid
 certificate. On a Mac: right-click the app and choose *Open*, then *Open*
 again. On Windows: click *More info*, then *Run anyway*.
 
+## It will not write over a file it named itself
+
+Converting `report.txt` writes `report.unicode.txt`. If that name is already
+taken — usually by an earlier conversion — Mukti **stops and says so** rather
+than replacing it. You chose the original's name; Mukti chose the new one, so
+replacing it is not something it will do quietly.
+
+Three ways forward:
+
+1. Move or delete the file that is in the way.
+2. `--out mine.txt` to pick your own name. Naming a file counts as asking, so
+   this one is replaced without complaint.
+3. `--force` to let Mukti replace the name it chose.
+
+`--in-place` is separate: it overwrites **the original**, and has to be typed.
+
 ## If something goes wrong
 
 **"… is empty"** — the file has nothing in it.

@@ -6,8 +6,15 @@
 //!
 //! # Two rules this tool will not break
 //!
-//! **It never writes over your file unless you ask it to.** The default is a
-//! new file beside the original. `--in-place` exists and has to be typed.
+//! **It never writes over a file unless you ask it to.** The default is a new
+//! file beside the original, and if that new name is already taken the run
+//! stops rather than destroying whatever was there. `--in-place` overwrites the
+//! original and has to be typed; `--out` names a file, and naming it is asking;
+//! `--force` allows the derived name to be replaced.
+//!
+//! That wording used to say only "your file", which was true of the original and
+//! false of everything else: the derived `.unicode.txt` sibling and any `--out`
+//! target were truncated without a word.
 //!
 //! **It never claims to have done more than it did.** Every run says how many
 //! words changed, and `check` shows you that without writing anything at all.
@@ -39,6 +46,7 @@ GRU953 Mukti — convert legacy Bangla text to Unicode.
 Options
   --font <name>     the Bengali font to set in Office files (default: Nirmala UI)
   --in-place        overwrite the original file instead of writing a new one
+  --force           allow the new file to replace one that is already there
   --out <file>      write the result to this file (one input file only)
   --quiet           print nothing but errors
   --version         print the version
@@ -76,6 +84,7 @@ fn run() -> Result<ExitCode, String> {
     let mut files: Vec<PathBuf> = Vec::new();
     let mut in_place = false;
     let mut quiet = false;
+    let mut force = false;
     let mut out: Option<PathBuf> = None;
     // Nirmala UI ships with Windows and covers Bengali; it is the safest
     // default for a document that will most likely be opened in Word. Anyone
@@ -93,6 +102,7 @@ fn run() -> Result<ExitCode, String> {
                     .ok_or_else(|| "--font needs a font name after it.".to_owned())?
             }
             "--in-place" => in_place = true,
+            "--force" => force = true,
             "--quiet" | "-q" => quiet = true,
             "--out" => {
                 out = Some(it.next().map(PathBuf::from).ok_or_else(|| {
@@ -130,7 +140,7 @@ fn run() -> Result<ExitCode, String> {
     let mut total = Tally::default();
 
     for path in &files {
-        match handle(path, mode, in_place, out.as_deref(), quiet, &font) {
+        match handle(path, mode, in_place, out.as_deref(), quiet, force, &font) {
             Ok(tally) => total.add(tally),
             Err(message) => {
                 eprintln!("{message}");
@@ -199,11 +209,12 @@ fn handle(
     in_place: bool,
     out: Option<&Path>,
     quiet: bool,
+    force: bool,
     font: &str,
 ) -> Result<Tally, String> {
     let from_pipe = path.as_os_str() == "-";
     if is_office(path) && !from_pipe {
-        return handle_office(path, mode, in_place, out, quiet, font);
+        return handle_office(path, mode, in_place, out, quiet, force, font);
     }
     if !from_pipe {
         if let Some(legacy) = path
@@ -211,7 +222,7 @@ fn handle(
             .and_then(|e| e.to_str())
             .and_then(LegacyFormat::from_extension)
         {
-            return handle_legacy(path, legacy, mode, in_place, out, quiet);
+            return handle_legacy(path, legacy, mode, in_place, out, quiet, force);
         }
     }
     if !from_pipe
@@ -222,7 +233,7 @@ fn handle(
             .as_deref()
             == Some("pdf")
     {
-        return handle_pdf(path, mode, out, quiet);
+        return handle_pdf(path, mode, out, quiet, force);
     }
 
     let bytes = if from_pipe {
@@ -266,7 +277,11 @@ fn handle(
             let destination = match out {
                 Some(o) => o.to_path_buf(),
                 None if in_place => path.to_path_buf(),
-                None => beside(path),
+                None => {
+                    let ours = beside(path);
+                    refuse_to_clobber(&ours, force)?;
+                    ours
+                }
             };
             // Converted text is Bengali, so it is always written as UTF-8 —
             // the encoding it arrived in cannot hold it.
@@ -295,7 +310,13 @@ fn handle(
 /// result with, so rewriting one would be a typesetting job. The user is told
 /// this rather than left to discover it — the layout does not survive, and
 /// somebody expecting their tables back would otherwise think it had failed.
-fn handle_pdf(path: &Path, mode: Mode, out: Option<&Path>, quiet: bool) -> Result<Tally, String> {
+fn handle_pdf(
+    path: &Path,
+    mode: Mode,
+    out: Option<&Path>,
+    quiet: bool,
+    force: bool,
+) -> Result<Tally, String> {
     let bytes = fs::read(path).map_err(|e| format!("Could not open {}: {e}", path.display()))?;
     let (text, summary) = convert_pdf_to_text(&bytes).map_err(|e| {
         format!(
@@ -313,9 +334,14 @@ fn handle_pdf(path: &Path, mode: Mode, out: Option<&Path>, quiet: bool) -> Resul
         }
         return Ok(tally);
     }
-    let destination = out
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| path.with_extension("unicode.txt"));
+    let destination = match out {
+        Some(o) => o.to_path_buf(),
+        None => {
+            let ours = path.with_extension("unicode.txt");
+            refuse_to_clobber(&ours, force)?;
+            ours
+        }
+    };
     fs::write(&destination, text.as_bytes())
         .map_err(|e| format!("Could not write {}: {e}", destination.display()))?;
     if !quiet {
@@ -341,6 +367,7 @@ fn handle_office(
     in_place: bool,
     out: Option<&Path>,
     quiet: bool,
+    force: bool,
     font: &str,
 ) -> Result<Tally, String> {
     let bytes = fs::read(path).map_err(|e| {
@@ -384,7 +411,11 @@ fn handle_office(
     let destination = match out {
         Some(o) => o.to_path_buf(),
         None if in_place => path.to_path_buf(),
-        None => beside(path),
+        None => {
+            let ours = beside(path);
+            refuse_to_clobber(&ours, force)?;
+            ours
+        }
     };
     fs::write(&destination, &converted).map_err(|e| {
         format!(
@@ -415,6 +446,7 @@ fn handle_legacy(
     in_place: bool,
     out: Option<&Path>,
     quiet: bool,
+    force: bool,
 ) -> Result<Tally, String> {
     // `--in-place` cannot mean anything here: the file that comes out is a
     // different format from the one that went in. Saying so is better than
@@ -461,7 +493,11 @@ fn handle_legacy(
 
     let destination = match out {
         Some(o) => o.to_path_buf(),
-        None => beside_as(path, format.modern_extension()),
+        None => {
+            let ours = beside_as(path, format.modern_extension());
+            refuse_to_clobber(&ours, force)?;
+            ours
+        }
     };
     fs::write(&destination, &outcome.document).map_err(|e| {
         format!(
@@ -479,6 +515,22 @@ fn handle_legacy(
         println!("  {}", PLAIN_TEXT_ONLY_NOTICE);
     }
     Ok(tally)
+}
+
+/// Refuse to destroy a file the user never named.
+///
+/// The derived name is ours, not theirs. If something is already sitting there
+/// — an earlier conversion, or a file that happens to share the name — writing
+/// over it is not something this tool was asked to do.
+fn refuse_to_clobber(destination: &Path, force: bool) -> Result<(), String> {
+    if force || !destination.exists() {
+        return Ok(());
+    }
+    Err(format!(
+        "{} already exists, and I chose that name rather than you.\n\
+         Move or delete it, use --out to pick a different name, or add --force to replace it.",
+        destination.display()
+    ))
 }
 
 /// `notes.doc` becomes `notes.unicode.docx` — a new name **and** a new format.
@@ -573,5 +625,44 @@ mod tests {
             tally.describe(Mode::Check),
             "3 of 10 words would be converted; 7 left exactly as they were."
         );
+    }
+}
+
+#[cfg(test)]
+mod clobber_tests {
+    use super::*;
+
+    #[test]
+    fn a_name_we_chose_is_not_written_over_without_being_asked() {
+        let dir = std::env::temp_dir().join("mukti-clobber-test");
+        let _ = fs::create_dir_all(&dir);
+        let taken = dir.join("already-here.txt");
+        fs::write(&taken, b"precious").unwrap();
+
+        // The derived name is ours, not theirs, so an existing file stops the run.
+        let refused = refuse_to_clobber(&taken, false).unwrap_err();
+        assert!(refused.contains("already exists"), "unhelpful: {refused}");
+        assert!(
+            refused.contains("--force"),
+            "the way out is not offered: {refused}"
+        );
+        assert_eq!(
+            fs::read(&taken).unwrap(),
+            b"precious",
+            "it was written over anyway"
+        );
+
+        // Asking is allowed.
+        assert!(
+            refuse_to_clobber(&taken, true).is_ok(),
+            "--force was refused"
+        );
+
+        // A name nothing occupies is fine either way.
+        let free = dir.join("not-here.txt");
+        let _ = fs::remove_file(&free);
+        assert!(refuse_to_clobber(&free, false).is_ok());
+
+        let _ = fs::remove_file(&taken);
     }
 }
