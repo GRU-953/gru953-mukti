@@ -17,6 +17,169 @@ use std::io::{Read, Seek};
 use quick_xml::events::Event;
 use quick_xml::Reader;
 
+// ---------------------------------------------------------------------------
+// Limits against a hostile archive
+// ---------------------------------------------------------------------------
+//
+// A `.docx` is a ZIP file, and ZIP has no ceiling on how much a small file can
+// expand to. Deflate reaches about 1032:1, so a 10 MB entry can claim 10 GB. Until
+// 13 August 2026 every XML part was read with an unbounded `read_to_string`, with
+// no cap on part size, on how many entries an archive could have, or on how far
+// one entry could expand. A document is something a stranger emails you.
+//
+// **These numbers were measured, not chosen.** Across all 1,377 documents in the
+// project's own corpus:
+//
+//   uncompressed XML part     median   4 KB    p99  673 KB    max  91.5 MB
+//   entries per archive       median  16       p99  259       max  528
+//   compression ratio         median   4x      p99   27x      max   83x
+//   total per archive         median 0.38 MB   p99 19.3 MB    max  94.7 MB
+//
+// That 91.5 MB part matters: it is a real document somebody uses. A limit chosen
+// by intuition — 10 MB, say, which sounds generous — would have rejected it. This
+// is why the corpus was measured first.
+//
+// Each limit sits well above the largest real value and far below anything that
+// would exhaust a machine capable of running a desktop app. Raising one is a
+// legitimate decision; do it by re-measuring, and record the new figures here.
+
+/// The most one XML part may expand to. 2.8x the largest real part seen.
+const MAX_PART_BYTES: u64 = 256 * 1024 * 1024;
+
+/// The most an entire archive may expand to across all its parts. 5.4x the
+/// largest real archive seen.
+const MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
+
+/// The most entries an archive may contain. 7.8x the largest real count seen.
+const MAX_ENTRIES: usize = 4_096;
+
+// There is deliberately NO compression-ratio limit, and that is a correction.
+//
+// One was written first, at 200:1 — 2.4x the highest ratio measured across the
+// corpus (83:1) and a fifth of what deflate can achieve. It looked well justified
+// and it was wrong. The test that a large but legitimate document must still be
+// accepted failed immediately: 100 MB of ordinary repetitive Word markup
+// compresses at **294:1**, because real XML repeats itself enormously.
+//
+// The corpus measurement was not wrong, it was answering a different question.
+// Its biggest documents were not its most repetitive ones, so the observed maximum
+// ratio said nothing about the ratio a legitimate *large* document can reach.
+//
+// And a ratio limit was never load-bearing anyway. What bounds memory is the
+// absolute size, checked against the declared size before a byte is read and
+// against the real size while reading. A ratio check adds no protection those two
+// do not already give, and rejects real documents. So it is gone.
+
+// Every limit must clear the largest value the real corpus contains — checked when
+// this file is COMPILED, not when tests are run.
+//
+// These began as a `#[test]`, and clippy objected that an assertion between two
+// constants has a constant value. It was right, and its suggestion is stronger than
+// what it replaced: a compile-time assertion means a binary whose limits would
+// reject real documents cannot be BUILT, so the guarantee does not depend on
+// anybody remembering to run the tests.
+//
+// The figures come from measuring all 1,377 documents in the project's corpus on
+// 13 August 2026. If the corpus grows and something exceeds a limit, re-measure and
+// update BOTH the constant and the figure here — never only the constant.
+const _: () = assert!(
+    MAX_PART_BYTES > 91_500_191,
+    "the part limit is below the largest real XML part measured (91.5 MB), so it \
+     would reject a document somebody actually uses"
+);
+const _: () = assert!(
+    MAX_TOTAL_BYTES > 94_680_000,
+    "the archive limit is below the largest real archive measured (94.7 MB)"
+);
+const _: () = assert!(
+    MAX_ENTRIES > 528,
+    "the entry limit is below the most entries measured in one real archive (528)"
+);
+const _: () = assert!(
+    MAX_TOTAL_BYTES >= MAX_PART_BYTES,
+    "one legitimate maximum-size part could never be read at all"
+);
+
+/// What a refusal says. Plain English, because it is shown to a person, and
+/// specific, because "invalid file" tells nobody anything.
+fn too_big(what: &str, saw: u64, limit: u64) -> Box<dyn std::error::Error> {
+    format!(
+        "This file claims to contain far more data than any real document does \
+         ({what}: {saw} against a limit of {limit}). It is either damaged or built \
+         to exhaust the memory of whatever opens it, so it has not been read. \
+         Nothing on your computer has been changed."
+    )
+    .into()
+}
+
+/// Check one entry before reading a byte of it, then read it under a hard cap.
+///
+/// The declared size is checked first because it costs nothing: a bomb announces
+/// its intentions in the central directory. The `take` afterwards is the part that
+/// actually protects anything, since a declared size can be a lie.
+fn read_part_within_limits<R: Read>(
+    entry: &mut R,
+    name: &str,
+    declared: u64,
+    running_total: &mut u64,
+) -> Result<String, Box<dyn std::error::Error>> {
+    read_within(
+        entry,
+        name,
+        declared,
+        running_total,
+        MAX_PART_BYTES,
+        MAX_TOTAL_BYTES,
+    )
+}
+
+/// The limit check itself, with the limits passed in.
+///
+/// Parameters rather than constants purely so this can be tested. Proving the
+/// behaviour against the real 256 MB limit means compressing a quarter of a
+/// gigabyte, which took minutes in a debug build — and a test suite slow enough
+/// that people stop running it protects nothing at all. With the limits injected,
+/// the same logic is exercised in microseconds against a limit of a few bytes.
+///
+/// The constants are then checked separately, and exactly, against the largest
+/// sizes the real corpus contains. Between them the two tests cover more than one
+/// enormous test ever did.
+fn read_within<R: Read>(
+    entry: &mut R,
+    name: &str,
+    declared: u64,
+    running_total: &mut u64,
+    max_part: u64,
+    max_total: u64,
+) -> Result<String, Box<dyn std::error::Error>> {
+    // The declared size is checked first because it is free: a bomb announces its
+    // intentions in the central directory before a byte is decompressed.
+    if declared > max_part {
+        return Err(too_big(&format!("the part {name}"), declared, max_part));
+    }
+    *running_total = running_total.saturating_add(declared);
+    if *running_total > max_total {
+        return Err(too_big("the whole archive", *running_total, max_total));
+    }
+
+    // Then read under a hard cap regardless of what the header claimed. The
+    // declared size is an assertion by the file; this is the only guarantee.
+    let mut xml = String::new();
+    let read = entry.take(max_part + 1).read_to_string(&mut xml).map_err(
+        |e| -> Box<dyn std::error::Error> {
+            format!("The part {name} could not be read as text: {e}").into()
+        },
+    )?;
+    if read as u64 > max_part {
+        return Err(too_big(
+            &format!("the part {name}, once expanded"),
+            read as u64,
+            max_part,
+        ));
+    }
+    Ok(xml)
+}
+
 /// The literal text of a `Text` event.
 ///
 /// From quick-xml 0.41 a `Text` event carries **no** entity references: `&amp;`
@@ -229,6 +392,9 @@ fn local_name(raw: &[u8]) -> &[u8] {
 /// Every run of text in one Office file, with its declared font.
 pub fn runs<R: Read + Seek>(archive: R) -> Result<Vec<Run>, Box<dyn std::error::Error>> {
     let mut zip = zip::ZipArchive::new(archive)?;
+    if zip.len() > MAX_ENTRIES {
+        return Err(too_big("entries", zip.len() as u64, MAX_ENTRIES as u64));
+    }
     let parts: Vec<String> = zip
         .file_names()
         .filter(|n| is_text_part(n))
@@ -236,9 +402,12 @@ pub fn runs<R: Read + Seek>(archive: R) -> Result<Vec<Run>, Box<dyn std::error::
         .collect();
 
     let mut out = Vec::new();
+    let mut total = 0u64;
     for part in parts {
-        let mut xml = String::new();
-        zip.by_name(&part)?.read_to_string(&mut xml)?;
+        let declared = zip.by_name(&part)?.size();
+        let mut entry = zip.by_name(&part)?;
+        let xml = read_part_within_limits(&mut entry, &part, declared, &mut total)?;
+        drop(entry);
         collect_runs(&xml, &mut out)?;
     }
     Ok(out)
@@ -487,8 +656,12 @@ pub fn convert_office(
     unicode_font: &str,
 ) -> Result<(Vec<u8>, Summary), Box<dyn std::error::Error>> {
     let mut archive = zip::ZipArchive::new(Cursor::new(bytes))?;
+    if archive.len() > MAX_ENTRIES {
+        return Err(too_big("entries", archive.len() as u64, MAX_ENTRIES as u64));
+    }
     let mut out = zip::ZipWriter::new(Cursor::new(Vec::new()));
     let mut summary = Summary::default();
+    let mut total_read = 0u64;
 
     // Work out what each text or font part should become, before writing
     // anything. Deciding first means a part that turns out not to need changing
@@ -500,11 +673,11 @@ pub fn convert_office(
         if !is_text_part(&name) && !is_font_part(&name) && !is_metadata_font_part(&name) {
             continue;
         }
-        let mut xml = String::new();
-        {
+        let xml = {
             let mut entry = archive.by_index(i)?;
-            std::io::Read::read_to_string(&mut entry, &mut xml)?;
-        }
+            let declared = entry.size();
+            read_part_within_limits(&mut entry, &name, declared, &mut total_read)?
+        };
         let (rewritten, part_summary) = if is_text_part(&name) {
             rewrite_part(&xml, unicode_font)?
         } else if is_metadata_font_part(&name) {
@@ -1124,5 +1297,95 @@ mod rewrite_tests {
             "the split word did not convert: {seen:?}"
         );
         assert!(seen.contains("ok"), "the following text was lost: {seen:?}");
+    }
+}
+
+#[cfg(test)]
+mod limit_tests {
+    use super::*;
+
+    /// A part that declares more than the limit is refused before it is read.
+    ///
+    /// The reader here is INFINITE. If the declared size were not checked first,
+    /// this would read until it filled memory — so the test would hang rather than
+    /// fail, which is its own kind of proof.
+    #[test]
+    fn a_part_declaring_too_much_is_refused_without_reading_it() {
+        let mut total = 0u64;
+        let mut endless = std::io::repeat(b'A');
+        let err = read_within(
+            &mut endless,
+            "word/document.xml",
+            5_000,
+            &mut total,
+            1_000,
+            10_000,
+        )
+        .expect_err("5,000 declared against a 1,000 limit must be refused");
+        assert!(err.to_string().contains("more data than any real document"));
+        assert!(err.to_string().contains("word/document.xml"), "{err}");
+    }
+
+    /// A part that LIES about its size is still capped while being read.
+    ///
+    /// The declared size is an assertion by the file. The read cap is the only
+    /// part that is a guarantee, and this is what proves it.
+    #[test]
+    fn a_part_that_understates_its_size_is_capped_as_it_is_read() {
+        let mut total = 0u64;
+        let mut endless = std::io::repeat(b'A');
+        let err = read_within(
+            &mut endless,
+            "xl/sharedStrings.xml",
+            10,
+            &mut total,
+            1_000,
+            10_000,
+        )
+        .expect_err("a part supplying more than it declared must still be capped");
+        assert!(err.to_string().contains("once expanded"), "{err}");
+    }
+
+    /// Several parts, each within the limit, may not add up past the archive total.
+    ///
+    /// A per-part limit alone is not a limit: a thousand parts just under it would
+    /// still exhaust the machine.
+    #[test]
+    fn parts_that_are_each_small_enough_can_still_exhaust_the_archive_budget() {
+        let mut total = 0u64;
+        for i in 0..9 {
+            let mut data = std::io::Cursor::new(vec![b'x'; 100]);
+            let outcome = read_within(&mut data, "part", 100, &mut total, 1_000, 800);
+            if i < 8 {
+                assert!(
+                    outcome.is_ok(),
+                    "part {i} of 100 bytes should fit within 800"
+                );
+            } else {
+                let err = outcome.expect_err("the ninth part takes the total past 800");
+                assert!(err.to_string().contains("the whole archive"), "{err}");
+            }
+        }
+    }
+
+    /// A part comfortably inside the limits is read, and returns its content.
+    ///
+    /// The limits must let ordinary work through, which is easy to forget when
+    /// every other test is about refusing things.
+    #[test]
+    fn an_ordinary_part_is_read_normally() {
+        let mut total = 0u64;
+        let mut data = std::io::Cursor::new(b"<w:document/>".to_vec());
+        let xml = read_within(
+            &mut data,
+            "word/document.xml",
+            13,
+            &mut total,
+            1_000,
+            10_000,
+        )
+        .expect("13 bytes against a 1,000 limit is ordinary");
+        assert_eq!(xml, "<w:document/>");
+        assert_eq!(total, 13);
     }
 }

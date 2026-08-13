@@ -25,5 +25,11 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # opening any PDF. Do not go back below 0.42.
 lopdf = "0.44"
 
+[dev-dependencies]
+# Property testing. The workspace had none: every one of its 105 original tests
+# used fixed literal inputs, so a rule could hold for every example somebody
+# thought of and fail on the first one they did not.
+proptest = "1"
+
 [lints]
 workspace = true

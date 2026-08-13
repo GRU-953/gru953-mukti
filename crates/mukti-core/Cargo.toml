@@ -18,5 +18,11 @@ authors.workspace = true
 # engineering rather than better. Unlicense/MIT, no transitive dependencies.
 fst = "0.4"
 
+[dev-dependencies]
+# Property testing. The workspace had none: every one of its 105 original tests
+# used fixed literal inputs, so a rule could hold for every example somebody
+# thought of and fail on the first one they did not.
+proptest = "1"
+
 [lints]
 workspace = true

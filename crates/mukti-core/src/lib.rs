@@ -524,8 +524,35 @@ pub fn repair_unicode(s: &str) -> String {
     if !s.chars().any(|c| ('\u{0980}'..='\u{09FF}').contains(&c)) {
         return s.to_owned();
     }
-    let s = reunite_split_vowels(s);
-    compose_two_part_vowels(&s)
+
+    // Repair until the text stops changing, rather than once.
+    //
+    // Found by property testing on 13 August 2026, which is the sort of thing no
+    // hand-written example finds: given `েৌৗ`, one call returned `ৌৗ` and a
+    // second call returned `ৌ`. So the function was not settled when it returned,
+    // and calling it again silently DELETED a character.
+    //
+    // The cause is two passes disagreeing, which LESSONS.md section 4 already
+    // names as this project's most expensive recurring bug. Composing `ে` + `ৗ`
+    // into `ৌ` can leave a vowel sign immediately after another one — a sequence
+    // Bengali does not permit — and the pass that collapses impossible doubles had
+    // already run, so it only saw it on the next call.
+    //
+    // Reordering the passes would fix this one input and leave the general problem:
+    // any future pass could create work for an earlier one. Running to a fixed
+    // point makes "the output is settled" true by construction instead of by
+    // argument. Each pass only ever shortens the text or leaves it alone, so this
+    // terminates; the bound is belt and braces, and reaching it would be a bug in
+    // a pass rather than a property of any real text.
+    let mut current = s.to_owned();
+    for _ in 0..8 {
+        let next = compose_two_part_vowels(&reunite_split_vowels(&current));
+        if next == current {
+            return current;
+        }
+        current = next;
+    }
+    current
 }
 
 /// Move a space that landed between a letter and its vowel sign.
