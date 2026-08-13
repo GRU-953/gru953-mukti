@@ -3,6 +3,22 @@
 A short guide for anyone who has old Bangla documents that come out as
 gibberish. No technical knowledge assumed.
 
+> ## ⚠️ Version 0.4.0 — the app window does not work yet
+>
+> If you have installed **version 0.4.0**, the window will open and look right,
+> but **nothing in it will respond**: not typing, not the buttons, not dragging a
+> file in. This is our fault, not yours, and nothing you can do will fix it. A
+> corrected version is being prepared.
+>
+> **The command-line tool in the same download does work.** If you are
+> comfortable typing a command, skip to *"Using it from the command line"* below.
+> If you are not, it is worth waiting for the next version.
+>
+> One more thing worth knowing: in this version, a damaged or deliberately
+> malicious PDF or Office file can make the program stop unexpectedly or use up
+> your computer's memory. Your own ordinary documents will not do this. It is
+> already fixed and will be in the next version.
+
 ## What problem this solves
 
 Bangla typed years ago in Bijoy or SutonnyMJ is not really Bangla to a

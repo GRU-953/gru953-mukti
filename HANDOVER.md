@@ -45,8 +45,24 @@ in the repository because a claim you cannot reproduce is not a claim.
 
 ## 3. Getting it running
 
-Rust 1.97.1 or newer. On this project it was installed with Homebrew's rustup,
-which does not put itself on the PATH automatically:
+**Rust 1.97.1**, pinned by `rust-toolchain.toml` since 13 August 2026 — rustup
+reads that file and switches to it automatically, fetching it if needed. You do
+not choose a version.
+
+(Two different numbers are easy to confuse here. The pin above is the one
+compiler this project is built and measured with. `rust-version` in `Cargo.toml`
+says **1.82**, which is the oldest compiler the *library* claims to work with —
+a claim nothing currently tests. This document used to say "1.97.1 or newer" as
+though it were a requirement, which contradicted the declared 1.82.)
+
+There is also a project-local build environment, which is the easier route:
+
+```bash
+source .sandbox/activate    # its own compiler and package cache, inside the project
+```
+
+Failing that, the compiler was installed here with Homebrew's rustup, which does
+not put itself on the PATH automatically:
 
 ```bash
 export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
@@ -116,12 +132,29 @@ Two honest caveats, both of which should stay attached to these numbers:
 - **Round-trip has a blind spot by construction.** If the encoder and decoder
   share a mistake, the text still comes back identical. That is why the real
   document measurement exists.
-- **One figure is not interpretable yet.** On real documents, 78.4% of
-  converted words are found in the dictionary. The remainder is *mostly* names,
-  places, acronyms and rare words that are in no word list — but nobody has
-  sampled it to find out how much is genuinely wrong. **Do not quote 78.4% as
-  an accuracy, and do not quote 21.6% as an error rate.** Sampling it is the
-  most valuable open task in the project.
+- **One figure has been withdrawn** (13 August 2026). This document previously
+  said 78.4% of converted words are found in the dictionary, over real documents.
+  Two things are wrong with that.
+
+  It came from a **superseded answer key**. The final run, on the larger key
+  actually used for every other figure here, gave **93.8%** — and that number was
+  never copied into the documentation, so the published one was a full 15 points
+  out and traceable to a file nobody re-checked.
+
+  And neither number is interpretable anyway. It is a **lower bound**: names,
+  places, acronyms and rare words are in no word list, so a perfectly converted
+  word can be missing from it. **Do not quote either figure as an accuracy, and
+  do not quote its complement as an error rate.**
+
+  So it is withdrawn rather than corrected, pending two things: measuring it
+  again from scratch, and hand-classifying a sample of the words *not* found into
+  names, rare words and genuine errors. That sampling remains **the most valuable
+  open task in the project** — it is the only thing that turns this into a figure
+  anyone may quote.
+
+  The lesson generalises, and it is why the withdrawal is written out at length:
+  a number copied from one report into a document outlives the report. Every
+  figure needs to name the run it came from.
 
 ## 6. Where the ground truth came from, and why you cannot have it
 

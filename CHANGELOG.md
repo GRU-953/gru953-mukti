@@ -1,5 +1,74 @@
 # Changelog
 
+## Unreleased
+
+### Known faults in 0.4.0, being fixed
+
+- **The desktop app's window does not respond to anything.** It opens, renders
+  correctly, and every control is dead. One configuration setting
+  (`app.withGlobalTauri`) was never enabled, so the window's script fails on its
+  first line and no button is ever connected. Separately, no permissions file
+  existed, which would independently have blocked *Open*, *Save as…* and
+  drag-and-drop. Nothing is wrong with the conversion itself, and the
+  command-line tool is unaffected.
+
+  It shipped because nothing in the automated checks had ever opened the window.
+  An automated test that really opens it, types legacy Bangla and checks the
+  result is being added, so this class of fault cannot return.
+
+- **The app never actually supported Office or PDF files**, despite the
+  documentation saying so. It does not depend on the code that reads them, and
+  its file picker only offered `.txt`, `.csv`, `.md`, `.json` and `.tsv`. Those
+  formats have always worked from the command line.
+
+### Fixed
+
+- **Three security flaws in the file readers** (`lopdf`, `quick-xml`), all
+  published after 0.4.0 was built. A crafted PDF could abort the program via
+  unbounded recursion ([RUSTSEC-2026-0187]); a crafted Office file could cause
+  quadratic slowdown ([RUSTSEC-2026-0194]) or exhaust memory
+  ([RUSTSEC-2026-0195]). Fixed by moving to `lopdf` 0.44 and `quick-xml` 0.41,
+  and each PDF page's decompressed size is now capped.
+
+  Found by turning the one-off release audit into a check that runs every time.
+
+- **A silent data-loss fault introduced by that upgrade, caught before release.**
+  From `quick-xml` 0.41 an XML entity reference arrives as its own event rather
+  than inside the text. Code written for the older version still compiles, and
+  quietly drops every `&`, `<` and `>` — while shifting all following character
+  positions, which would have corrupted documents well beyond the character
+  itself. Caught by an existing test; two more were added, including one that
+  places entities *before* Bangla text so any drift fails visibly.
+
+- **A reference that cannot be resolved now stops the conversion** instead of
+  being dropped. Office files are not permitted to declare their own entities, so
+  one appearing means the file is damaged or probing — and either guessing or
+  dropping would corrupt the text silently. The original is left untouched.
+
+### Corrected
+
+- **The "78.4% of converted words found in the dictionary" figure is withdrawn.**
+  It came from a superseded answer key; the final run gave 93.8%. More
+  importantly, neither number is an accuracy — it is a lower bound, because names
+  and rare words are in no word list. It returns only after being re-measured and
+  after a hand-classified sample of the words not found.
+- The instruction to reproduce the figures with `cargo run --release -p eval` was
+  wrong: that command cannot run, as the corpus argument is required and has no
+  default.
+- The stated Rust requirement ("1.97.1 or newer") contradicted the declared
+  minimum of 1.82. The build compiler is now pinned by `rust-toolchain.toml`.
+
+### Added
+
+- A project-local build environment (`source .sandbox/activate`) with its own
+  pinned compiler and package cache, and `deny.toml` stating the dependency
+  policy — permissive licences only, with MPL-2.0 permitted for five named crates
+  after confirming they ship only inside the desktop app.
+
+[RUSTSEC-2026-0187]: https://rustsec.org/advisories/RUSTSEC-2026-0187
+[RUSTSEC-2026-0194]: https://rustsec.org/advisories/RUSTSEC-2026-0194
+[RUSTSEC-2026-0195]: https://rustsec.org/advisories/RUSTSEC-2026-0195
+
 ## 0.4.0 — 13 August 2026
 
 **Renamed from GRU953 Scribe to GRU953 Mukti** (মুক্তি, "freedom"). The app, the
@@ -81,7 +150,9 @@ from a held-out half of the data never looked at during tuning:
 - **The interface is English only.** Bangla is planned; every string already
   sits in one place so it is a translation rather than a rebuild.
 - **One reported figure is not yet interpretable.** Converted words found in
-  the dictionary, over real documents, sits at 78.4%. That is a lower bound —
+  the dictionary, over real documents, sits at 78.4%. **(Withdrawn — see
+  Unreleased above. This came from a superseded answer key and is not an
+  accuracy in any case.)** That is a lower bound —
   names and rare words are in no word list — and should not be read as an
   error rate until the residue has been sampled.
 

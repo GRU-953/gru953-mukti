@@ -21,6 +21,43 @@ Works completely offline. No account, no upload, no network.
 
 ---
 
+> ## ⚠️ Please read before downloading v0.4.0
+>
+> Two faults have been found in the released version. A fixed release is being
+> prepared. Until then:
+>
+> **1. The desktop app's window does not respond.** It opens and looks correct,
+> but nothing works — typing, the buttons, opening a file, drag-and-drop. The
+> cause is a single missing setting that stops the window's code from starting at
+> all, plus a missing permissions file. It was never caught because no automated
+> check ever opened the window. Nothing is wrong with the conversion itself.
+>
+> **2. A malformed file can crash it.** Three flaws in the libraries Mukti uses to
+> read PDF and Office files were published after v0.4.0 was built
+> ([RUSTSEC-2026-0187](https://rustsec.org/advisories/RUSTSEC-2026-0187),
+> [-0194](https://rustsec.org/advisories/RUSTSEC-2026-0194),
+> [-0195](https://rustsec.org/advisories/RUSTSEC-2026-0195)). A deliberately
+> crafted PDF can stop the program, and a crafted Office file can make it
+> consume all available memory. Your own documents will not do this. Both are
+> already fixed in the source and will be in the next release.
+>
+> **What still works properly: the command-line tool.** It is unaffected by the
+> first fault. Convert a file with:
+>
+> ```
+> mukti convert yourfile.docx
+> ```
+>
+> **Also being corrected:** one accuracy figure for real documents has been
+> withdrawn as not meaning what it appeared to — see [Accuracy](#accuracy).
+>
+> **Also being improved:** the window's accessibility. Every text colour meets the
+> WCAG 2.2 AA contrast requirement, but the borders around the text boxes and most
+> buttons do not — they are too faint against their background. Being fixed
+> alongside the window itself.
+
+---
+
 ## Install
 
 Download from the [latest release](https://github.com/GRU-953/gru953-mukti/releases/latest).
@@ -71,7 +108,15 @@ intact, no legacy font left behind.
 
 ## Accuracy
 
-Measured, each with its sample size. Reproduce with `cargo run --release -p eval`.
+Measured, each with its sample size. To reproduce, you need your own document
+set (see [How that was measured](#accuracy) below and `HANDOVER.md` §6) and then:
+
+```
+cargo run --release -p eval -- --corpus "<your word list folder>" --labels <your labelled set>
+```
+
+There is no default for `--corpus`: the material these figures were measured
+against is private and cannot be shipped.
 
 | | Result | Sample |
 |---|---|---|
@@ -102,10 +147,24 @@ an English run *is not*. No hand-labelling, and the code under test is never
 asked what it thinks. Runs declaring no font are excluded rather than guessed
 at, as are runs whose declared font contradicts their own bytes.
 
-**One figure is deliberately not a headline.** Converted words found in the
-dictionary, over real documents, sits at **78.4%**. That is a *lower* bound, not
-an error rate — names, places, acronyms and rare words are in no word list. It
-should not be read as "21.6% wrong" until the residue is sampled and classified.
+**One figure has been withdrawn.** Earlier versions of this page reported that
+78.4% of converted words, over real documents, were found in the dictionary.
+That number should not have been published, for two separate reasons.
+
+First, it came from a *superseded* answer key. A later run on the final, larger
+answer key gave 93.8% — a materially different figure, and the one that was never
+copied into the documentation.
+
+Second, and more importantly, **neither number means what it looks like.** It is
+a *lower* bound, not an error rate: names, places, acronyms and rare words are in
+no word list, so a perfectly converted word can be absent from it. "78.4%" was
+never "21.6% wrong", and nor is 93.8%.
+
+Rather than swap one unverifiable number for another, the figure is withdrawn
+until it is measured again from scratch and, separately, until a sample of the
+words *not* found is classified by hand into names, rare words, and genuine
+errors. Only that last step turns this into something quotable. The other figures
+in the table above are unaffected.
 
 **PDF quality varies widely.** Across 60 legacy-font PDFs: 28 good (70%+ real
 words), 19 fair, 7 poor, 6 produced nothing. Median 71.3%.
