@@ -40,7 +40,7 @@ use std::fs;
 use std::io::{Read, Seek, Write};
 use std::path::{Path, PathBuf};
 
-use mukti_formats::office::is_legacy_font;
+use mukti_formats::office::{is_exactly_legacy_font, is_legacy_font, names_a_font};
 use mukti_formats::{convert_office, convert_pdf_to_text, runs, Summary};
 
 /// What we decided about one file.
@@ -338,7 +338,10 @@ fn check(path: &Path, kind: &str, negative: bool) -> Outcome {
         Err(e) => return Outcome::bad(Status::Failed, format!("could not read it: {e}")),
     };
     if bytes.is_empty() {
-        return Outcome::bad(Status::Failed, "the file is empty");
+        // A zero-byte file in the archive. Not a defect in Mukti — there is
+        // nothing to convert and nothing it could have done differently. The CLI
+        // already catches this case and says so before the zip reader sees it.
+        return Outcome::bad(Status::Unsupported, "the file is empty (0 bytes)");
     }
 
     match kind {
@@ -502,8 +505,12 @@ fn entries_match(before: &[u8], after: &[u8]) -> Result<(), String> {
     }
 
     for name in &names_a {
-        // Text and font parts are meant to change. Everything else must not.
-        if mukti_formats::office::is_text_part(name) || mukti_formats::office::is_font_part(name) {
+        // Text, font and font-metadata parts are meant to change. Everything
+        // else must not.
+        if mukti_formats::office::is_text_part(name)
+            || mukti_formats::office::is_font_part(name)
+            || mukti_formats::office::is_metadata_font_part(name)
+        {
             continue;
         }
         let one = read_entry(&mut a, name)?;
@@ -580,24 +587,86 @@ fn read_entry<R: Read + Seek>(zip: &mut zip::ZipArchive<R>, name: &str) -> Resul
     Ok(buf)
 }
 
+/// No legacy font name may survive anywhere a font is actually named.
+///
+/// **Where** matters as much as what. An earlier version of this function scanned
+/// every word of every XML part, and reported a spreadsheet as retaining a legacy
+/// font because a participant list contained the name **SULEKHA** — which is also
+/// a font. That is not a new mistake: the release check for v0.4.0 made the
+/// identical one on the identical corpus, and `LESSONS.md` §1 records it. Writing
+/// a verifier is no protection against repeating the bug it was written to catch.
+///
+/// So this parses the XML and looks in exactly two places:
+///
+/// * **attribute values on elements that name a font** — `w:rFonts`, `a:latin`,
+///   `rFont` and the rest, via the converter's own `names_a_font`;
+/// * **text nodes in `docProps/app.xml`**, the one part that records font names as
+///   text, and there only when the text is *exactly* a font name.
+///
+/// Cell values, slide titles and body text are not font names and are not looked
+/// at.
 fn no_legacy_font_left(after: &[u8]) -> Result<(), String> {
+    use quick_xml::events::Event;
+
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(after))
         .map_err(|e| format!("the result is not a readable archive: {e}"))?;
     let names: Vec<String> = zip.file_names().map(str::to_owned).collect();
+
     for name in names {
         if !name.ends_with(".xml") {
             continue;
         }
         let bytes = read_entry(&mut zip, &name)?;
-        let text = String::from_utf8_lossy(&bytes);
-        // Ask the converter's own list, not a copy of it.
-        for word in text.split(['"', '\'', '<', '>', '=', ' ']) {
-            if !word.is_empty() && is_legacy_font(word) {
-                return Err(format!("a legacy font name survived in {name}"));
+        let xml = String::from_utf8_lossy(&bytes).into_owned();
+        let metadata = mukti_formats::office::is_metadata_font_part(&name);
+
+        let mut reader = quick_xml::Reader::from_str(&xml);
+        reader.config_mut().trim_text(false);
+        loop {
+            let event = match reader.read_event() {
+                Ok(e) => e,
+                // A part we cannot parse is not evidence of a surviving font.
+                // Report it as its own problem rather than silently passing.
+                Err(e) => return Err(format!("{name} could not be parsed: {e}")),
+            };
+            match event {
+                Event::Eof => break,
+                Event::Start(e) | Event::Empty(e) => {
+                    if !names_a_font(local_name(e.name().as_ref())) {
+                        continue;
+                    }
+                    for attr in e.attributes().flatten() {
+                        let value = attr
+                            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                            .unwrap_or_default();
+                        if is_legacy_font(&value) {
+                            return Err(format!(
+                                "a legacy font is still named by an attribute in {name}"
+                            ));
+                        }
+                    }
+                }
+                Event::Text(e) if metadata => {
+                    let text = e.decode().unwrap_or_default();
+                    if is_exactly_legacy_font(&text) {
+                        return Err(format!(
+                            "a legacy font name survives as text in {name}"
+                        ));
+                    }
+                }
+                _ => {}
             }
         }
     }
     Ok(())
+}
+
+/// An element's name with any namespace prefix removed.
+fn local_name(name: &[u8]) -> &[u8] {
+    match name.iter().position(|b| *b == b':') {
+        Some(i) => &name[i + 1..],
+        None => name,
+    }
 }
 
 fn check_pdf(bytes: &[u8]) -> Outcome {

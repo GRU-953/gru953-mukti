@@ -128,6 +128,12 @@ pub fn is_text_part(name: &str) -> bool {
 pub fn is_font_part(name: &str) -> bool {
     name == "xl/styles.xml"
         || name == "word/styles.xml"
+        // Word 2010 writes a SECOND copy of the style sheet for older readers.
+        // It was missed until a corpus-wide check found a legacy font name
+        // surviving in it — the style sheet said Nirmala UI and its twin still
+        // said SutonnyMJ, so which font the reader got depended on their version
+        // of Word. Found 13 August 2026 by checking all 676 documents.
+        || name == "word/stylesWithEffects.xml"
         // List bullets carry their own font, and a numbered list in a Bangla
         // document is numbered in Bangla.
         || name == "word/numbering.xml"
@@ -137,6 +143,22 @@ pub fn is_font_part(name: &str) -> bool {
         || (name.starts_with("ppt/slideMasters/") && name.ends_with(".xml"))
         || (name.starts_with("ppt/slideLayouts/") && name.ends_with(".xml"))
         || (name.starts_with("ppt/theme/") && name.ends_with(".xml"))
+}
+
+/// The one part that records font names as element **text** rather than as an
+/// attribute.
+///
+/// `docProps/app.xml` carries PowerPoint's "Fonts Used" summary, written as
+/// `<vt:lpstr>SutonnyMJ</vt:lpstr>` inside `TitlesOfParts`. The attribute-renaming
+/// path cannot see it, and the code used to say so and leave it — until a check
+/// across the whole archive found the stale name still sitting in **29** of 142
+/// presentations after conversion. Cosmetic, in that no text renders from it, but
+/// it is a claim the file makes about itself that is no longer true.
+///
+/// Handled separately, and strictly: only text that is *exactly* a legacy font
+/// name is replaced, because this same vector also holds slide titles.
+pub fn is_metadata_font_part(name: &str) -> bool {
+    name == "docProps/app.xml"
 }
 
 /// Elements whose END marks the end of a line of text.
@@ -168,7 +190,7 @@ pub(crate) fn ends_a_line(name: &[u8]) -> bool {
 /// as attributes. It is metadata — Word and PowerPoint rebuild it on save —
 /// and nothing renders from it, so a stale name there changes nothing a
 /// reader sees.
-pub(crate) fn names_a_font(name: &[u8]) -> bool {
+pub fn names_a_font(name: &[u8]) -> bool {
     matches!(
         name,
         b"rFonts"
@@ -424,9 +446,30 @@ pub const LEGACY_FONTS: &[&str] = &[
 ];
 
 /// Does this font name belong to a legacy Bangla font?
+///
+/// Deliberately a substring test, because a real font attribute reads
+/// `SutonnyMJ Bold` or `NikoshBAN` as often as the bare name. Safe **only** where
+/// the value is known to be a font name — an attribute on an element that
+/// [`names_a_font`]. Never use it on arbitrary document text: `sulekha` is a
+/// Bengali given name, and a participant list containing "SULEKHA" is not a
+/// document with a legacy font in it. That exact false positive has now been hit
+/// twice on this corpus, once by a release check and once by a verifier written
+/// afterwards to catch what the release check missed.
 pub fn is_legacy_font(name: &str) -> bool {
     let lower = name.to_lowercase();
     LEGACY_FONTS.iter().any(|f| lower.contains(f))
+}
+
+/// Is this text *exactly* the name of a legacy font, and nothing else?
+///
+/// The strict counterpart to [`is_legacy_font`], for the one place a font name
+/// appears as element text rather than as an attribute: `docProps/app.xml`, whose
+/// "Fonts Used" list PowerPoint writes as `<vt:lpstr>SutonnyMJ</vt:lpstr>`. An
+/// exact match is required precisely so that a cell or a slide title merely
+/// *containing* one of these words is left alone.
+pub fn is_exactly_legacy_font(text: &str) -> bool {
+    let lower = text.trim().to_lowercase();
+    LEGACY_FONTS.iter().any(|f| &lower == f)
 }
 
 /// Convert every Bangla word inside an Office file.
@@ -454,7 +497,7 @@ pub fn convert_office(
         std::collections::BTreeMap::new();
     for i in 0..archive.len() {
         let name = archive.by_index(i)?.name().to_owned();
-        if !is_text_part(&name) && !is_font_part(&name) {
+        if !is_text_part(&name) && !is_font_part(&name) && !is_metadata_font_part(&name) {
             continue;
         }
         let mut xml = String::new();
@@ -462,29 +505,39 @@ pub fn convert_office(
             let mut entry = archive.by_index(i)?;
             std::io::Read::read_to_string(&mut entry, &mut xml)?;
         }
-        // A font-only part gets its names swapped and its text left alone.
         let (rewritten, part_summary) = if is_text_part(&name) {
             rewrite_part(&xml, unicode_font)?
+        } else if is_metadata_font_part(&name) {
+            // Font names recorded as element text, not as attributes.
+            rewrite_font_names_in_text(&xml, unicode_font)?
         } else {
+            // A font-only part gets its names swapped and its text left alone.
             rewrite_fonts_only(&xml, unicode_font)?
         };
         summary.words_converted += part_summary.words_converted;
         summary.words_untouched += part_summary.words_untouched;
         summary.fonts_changed += part_summary.fonts_changed;
 
-        // Only record it if it actually changed.
+        // Keep the rewrite ONLY if this part actually needed one.
         //
-        // Reading an XML part and writing it back out again is not free of
-        // consequences even when nothing is edited: the writer re-serialises the
-        // markup and the archive re-compresses it, so an untouched part comes out
-        // as different bytes. A document with no legacy Bangla in it was
-        // therefore never returned unchanged, which is both a broken promise and
-        // a needless risk — every re-serialisation is a chance to differ from the
-        // original in some way nobody has thought to check.
+        // The test is what the rewrite *did* — words converted, fonts renamed —
+        // not whether the resulting string differs. Those are not the same
+        // question, and the difference matters:
         //
-        // So a part that comes back identical is treated exactly like an image:
-        // copied through, untouched, still compressed exactly as Word left it.
-        if rewritten != xml {
+        // Reading an XML part and writing it back re-serialises the markup, and a
+        // faithful re-serialisation is not the same text. quick-xml escapes a
+        // carriage return as `&#13;`, because an XML parser would otherwise
+        // silently turn it into a newline — correct, and four characters longer.
+        // Word writes bare carriage returns in places, so parts nobody had edited
+        // came back slightly larger. Comparing strings would take that grown
+        // version; asking what changed rejects it.
+        //
+        // So a part that converted nothing and renamed nothing is treated exactly
+        // like an image: copied through, byte for byte, still compressed as Word
+        // left it. Every re-serialisation is an opportunity to differ from the
+        // original in a way nobody has thought to check, and the cheapest way to
+        // take that risk to zero is not to do it.
+        if part_summary.words_converted > 0 || part_summary.fonts_changed > 0 {
             replacements.insert(name, rewritten);
         }
     }
@@ -691,6 +744,47 @@ fn rename_legacy_font<'a>(
 /// Deliberately does not touch a single character of text: a style sheet's
 /// strings are names of styles, and converting those would rename the user's
 /// formatting.
+/// Replace font names that appear as element **text**, changing nothing else.
+///
+/// For `docProps/app.xml` only — see [`is_metadata_font_part`]. PowerPoint writes
+/// its "Fonts Used" list as text nodes, so the attribute path never reaches it and
+/// a converted presentation went on claiming to use SutonnyMJ.
+///
+/// Strict by design. The same `TitlesOfParts` vector holds slide titles, so only
+/// text that is *exactly* a legacy font name is touched. A slide titled
+/// "SutonnyMJ conversion notes" keeps its title; one whose entire content is
+/// `SutonnyMJ` is a font entry and is renamed. That is the correct trade: the
+/// alternative once flagged a participant named Sulekha as a font.
+fn rewrite_font_names_in_text(
+    xml: &str,
+    unicode_font: &str,
+) -> Result<(String, Summary), Box<dyn std::error::Error>> {
+    let mut reader = quick_xml::Reader::from_str(xml);
+    reader.config_mut().trim_text(false);
+    let mut writer = Writer::new(Cursor::new(Vec::new()));
+    let mut summary = Summary::default();
+
+    loop {
+        match reader.read_event()? {
+            XmlEvent::Eof => break,
+            XmlEvent::Text(e) => {
+                let text = event_text(&e)?;
+                if is_exactly_legacy_font(&text) {
+                    summary.fonts_changed += 1;
+                    writer.write_event(XmlEvent::Text(BytesText::new(unicode_font)))?;
+                } else {
+                    writer.write_event(XmlEvent::Text(e))?;
+                }
+            }
+            other => writer.write_event(other)?,
+        }
+    }
+    Ok((
+        String::from_utf8(writer.into_inner().into_inner())?,
+        summary,
+    ))
+}
+
 fn rewrite_fonts_only(
     xml: &str,
     unicode_font: &str,
