@@ -360,7 +360,48 @@ fn display_name(path: &Path) -> String {
         .unwrap_or_else(|| "the chosen file".to_owned())
 }
 
+/// Say plainly that there is no desktop to draw on, rather than panicking.
+///
+/// Found on 14 August 2026 by installing the published `.deb` in a container and
+/// running it — the first time any Linux artefact of this project had been run at
+/// all. With no display, GTK cannot start and the window layer panics:
+///
+/// ```text
+/// thread 'main' panicked at /home/runner/.cargo/registry/.../tao-0.35.3/...
+/// Failed to initialize gtk backend!: BoolError { message: "Failed to initialize GTK" ... }
+/// ```
+///
+/// Two things wrong with that. It is a panic where a sentence would do — the
+/// same rule as every other error path here — and it prints the file paths of the
+/// machine that built the release, which are nobody's business and mean nothing
+/// to the person reading them.
+///
+/// Only Linux needs this. macOS and Windows always have a window server.
+#[cfg(target_os = "linux")]
+fn refuse_without_a_desktop() {
+    let has_display = std::env::var_os("DISPLAY").is_some_and(|v| !v.is_empty())
+        || std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty());
+    if has_display {
+        return;
+    }
+    eprintln!(
+        "GRU953 Mukti is a desktop app and there is no desktop here — neither \
+         DISPLAY nor WAYLAND_DISPLAY is set.\n\
+         \n\
+         If you are connected over SSH, either run it on the machine itself or \
+         forward its display with `ssh -X`.\n\
+         \n\
+         To convert files without a desktop, use the command-line tool instead:\n\
+         \n\
+         \x20   mukti convert yourfile.docx\n"
+    );
+    std::process::exit(1);
+}
+
 fn main() {
+    #[cfg(target_os = "linux")]
+    refuse_without_a_desktop();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(State::default())
