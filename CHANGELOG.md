@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — becomes 0.5.0
+## 0.5.0 — 14 August 2026
 
 ### New
 
@@ -56,7 +56,7 @@
 - **An unsoundness advisory can no longer pass the release gate unnamed.**
 
 
-### Known faults in 0.4.0, being fixed
+### The faults in 0.4.0 that this release fixes
 
 - **The desktop app's window does not respond to anything.** It opens, renders
   correctly, and every control is dead. One configuration setting

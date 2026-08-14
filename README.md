@@ -21,38 +21,31 @@ Works completely offline. No account, no upload, no network.
 
 ---
 
-> ## ⚠️ Please read before downloading v0.4.0
+> ## ⚠️ If you have v0.4.0, please replace it
 >
-> Two faults have been found in the released version. A fixed release is being
-> prepared. Until then:
+> **v0.5.0 fixes two faults that were in v0.4.0.** It is out now — the download
+> links are below.
 >
-> **1. The desktop app's window does not respond.** It opens and looks correct,
-> but nothing works — typing, the buttons, opening a file, drag-and-drop. The
-> cause is a single missing setting that stops the window's code from starting at
-> all, plus a missing permissions file. It was never caught because no automated
-> check ever opened the window. Nothing is wrong with the conversion itself.
+> **1. The desktop app's window did not respond.** It opened and looked correct,
+> but nothing worked — typing, the buttons, opening a file, drag-and-drop. One
+> missing setting stopped the window's code from starting at all, and a missing
+> permissions file would independently have blocked *Open*, *Save as…* and
+> drag-and-drop. It was never caught because no automated check had ever opened
+> the window. Nothing was wrong with the conversion itself. Both causes are
+> fixed, and a test now fails if either returns.
 >
-> **2. A malformed file can crash it.** Three flaws in the libraries Mukti uses to
-> read PDF and Office files were published after v0.4.0 was built
+> **2. A malformed file could crash it.** Three flaws in the libraries Mukti uses
+> to read PDF and Office files were published after v0.4.0 was built
 > ([RUSTSEC-2026-0187](https://rustsec.org/advisories/RUSTSEC-2026-0187),
 > [-0194](https://rustsec.org/advisories/RUSTSEC-2026-0194),
 > [-0195](https://rustsec.org/advisories/RUSTSEC-2026-0195)). A deliberately
-> crafted PDF can stop the program, and a crafted Office file can make it
-> consume all available memory. Your own documents will not do this. Both are
-> already fixed in the source and will be in the next release.
+> crafted PDF could stop the program, and a crafted Office file could make it
+> consume all available memory. Your own documents would not do this. Fixed by
+> upgrading, and the check that finds such flaws now runs as part of the build.
 >
-> **What still works properly: the command-line tool.** It is unaffected by the
-> first fault. Convert a file with:
->
-> ```
-> mukti convert yourfile.docx
-> ```
->
-> **Both are fixed in the source and awaiting release**, along with the window
-> being rebuilt on the GRU953 brand properly, its accessibility corrected (the
-> borders on the text boxes and buttons were too faint to meet the contrast
-> requirement), and Word, Excel, PowerPoint and PDF finally working *in the window*
-> rather than only from the command line.
+> **Files you converted with the v0.4.0 command-line tool are fine.** That tool
+> was unaffected by the first fault, and nothing about the conversion itself has
+> changed since.
 
 ---
 
@@ -62,10 +55,10 @@ Download from the [latest release](https://github.com/GRU-953/gru953-mukti/relea
 
 | Your computer | Download |
 |---|---|
-| **macOS** (Intel or Apple silicon) | `GRU953.Mukti_0.4.0_universal.dmg` |
-| **Windows** | `GRU953.Mukti_0.4.0_x64-setup.exe` |
-| **Ubuntu / Debian** | `GRU953.Mukti_0.4.0_amd64.deb` |
-| **Other Linux** | `GRU953.Mukti_0.4.0_amd64.AppImage` |
+| **macOS** (Intel or Apple silicon) | `GRU953.Mukti_0.5.0_universal.dmg` |
+| **Windows** | `GRU953.Mukti_0.5.0_x64-setup.exe` |
+| **Ubuntu / Debian** | `GRU953.Mukti_0.5.0_amd64.deb` |
+| **Other Linux** | `GRU953.Mukti_0.5.0_amd64.AppImage` |
 
 For the command line, download the `mukti-*` file for your platform and put it
 on your `PATH`.

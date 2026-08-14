@@ -3,21 +3,18 @@
 A short guide for anyone who has old Bangla documents that come out as
 gibberish. No technical knowledge assumed.
 
-> ## ⚠️ Version 0.4.0 — the app window does not work yet
+> ## ⚠️ If you have version 0.4.0, please install 0.5.0
 >
-> If you have installed **version 0.4.0**, the window will open and look right,
-> but **nothing in it will respond**: not typing, not the buttons, not dragging a
-> file in. This is our fault, not yours, and nothing you can do will fix it. A
-> corrected version is being prepared.
+> In **version 0.4.0** the window opened and looked right, but **nothing in it
+> responded**: not typing, not the buttons, not dragging a file in. That was our
+> fault, not yours. **Version 0.5.0 fixes it.**
 >
-> **The command-line tool in the same download does work.** If you are
-> comfortable typing a command, skip to *"Using it from the command line"* below.
-> If you are not, it is worth waiting for the next version.
+> The same version also fixes a fault where a damaged or deliberately malicious
+> PDF or Office file could make the program stop unexpectedly or use up your
+> computer's memory. Your own ordinary documents would not have done this.
 >
-> One more thing worth knowing: in this version, a damaged or deliberately
-> malicious PDF or Office file can make the program stop unexpectedly or use up
-> your computer's memory. Your own ordinary documents will not do this. It is
-> already fixed and will be in the next version.
+> **Anything you converted with the 0.4.0 command-line tool is fine.** That part
+> always worked, and the conversion itself has not changed.
 
 ## What problem this solves
 

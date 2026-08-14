@@ -467,14 +467,14 @@ dependencies = [
 
 [[package]]
 name = "corpus-label"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "mukti-formats",
 ]
 
 [[package]]
 name = "corpus-verify"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "gru953-mukti",
  "mukti-formats",
@@ -957,7 +957,7 @@ dependencies = [
 
 [[package]]
 name = "eval"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "fst",
  "gru953-mukti",
@@ -1378,7 +1378,7 @@ dependencies = [
 
 [[package]]
 name = "gru953-mukti"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "fst",
  "proptest",
@@ -1930,7 +1930,7 @@ dependencies = [
 
 [[package]]
 name = "lexicon-build"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "fst",
  "gru953-mukti",
@@ -2137,7 +2137,7 @@ dependencies = [
 
 [[package]]
 name = "mukti-app"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "gru953-mukti",
  "mukti-formats",
@@ -2150,7 +2150,7 @@ dependencies = [
 
 [[package]]
 name = "mukti-cli"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "gru953-mukti",
  "mukti-formats",
@@ -2158,7 +2158,7 @@ dependencies = [
 
 [[package]]
 name = "mukti-formats"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "gru953-mukti",
  "lopdf",
