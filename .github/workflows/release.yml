@@ -37,16 +37,29 @@ jobs:
           # the other three finished. A universal binary needs no scarce
           # runner, produces one file for users to choose between instead of
           # two, and is what Apple expects anyway.
+          #
+          # `download-name` is what the file is called on the releases page, and it
+          # is deliberately NOT the Rust target triple. The people this tool is for
+          # should not have to know that `x86_64-unknown-linux-gnu` is the Linux one.
+          # The triple still names the build directory and the CI artefact, where
+          # precision matters and no user ever looks.
           - os: macos-latest
             label: macOS (universal)
             target: universal-apple-darwin
+            download-name: mukti-macos
             extra-targets: aarch64-apple-darwin,x86_64-apple-darwin
+          # ubuntu-22.04 on purpose, not ubuntu-latest. The binary then requires
+          # glibc 2.35 or older rather than whatever the newest runner ships, and so
+          # runs on Ubuntu 22.04, Debian 12 and RHEL 9 as well as anything newer.
+          # Building on a newer runner would silently drop those distributions.
           - os: ubuntu-22.04
             label: Ubuntu
             target: x86_64-unknown-linux-gnu
+            download-name: mukti-linux
           - os: windows-latest
             label: Windows
             target: x86_64-pc-windows-msvc
+            download-name: mukti-windows
 
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -129,19 +142,19 @@ jobs:
           case "${{ runner.os }}" in
             macOS)
               cp target/universal-apple-darwin/release/mukti \
-                 "out/mukti-${{ matrix.target }}"
+                 "out/${{ matrix.download-name }}"
               ;;
             Windows)
-              cp target/release/mukti.exe "out/mukti-${{ matrix.target }}.exe"
+              cp target/release/mukti.exe "out/${{ matrix.download-name }}.exe"
               ;;
             *)
-              cp target/release/mukti "out/mukti-${{ matrix.target }}"
+              cp target/release/mukti "out/${{ matrix.download-name }}"
               ;;
           esac
 
           # Prove the claim in the file name rather than asserting it.
           if [ "${{ runner.os }}" = "macOS" ]; then
-            lipo -archs "out/mukti-${{ matrix.target }}" | grep -q "x86_64 arm64" \
+            lipo -archs "out/${{ matrix.download-name }}" | grep -q "x86_64 arm64" \
               || { echo "the universal binary is not universal"; exit 1; }
           fi
 
