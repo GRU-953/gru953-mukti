@@ -1,4 +1,4 @@
-# Build the installers for macOS, Windows and Ubuntu.
+# Build the command-line binary for macOS, Windows and Linux.
 #
 # Runs only when a version tag is pushed, or when started by hand. It never
 # runs on an ordinary commit: building three platforms takes real minutes, and
@@ -80,15 +80,8 @@ jobs:
       # Ubuntu 22.04 rather than latest: the webkit2gtk package name changed,
       # and pinning it here means a release does not break the day the runner
       # image moves on.
-      - name: Install the desktop app's Linux dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
-            librsvg2-dev libxdo-dev libssl-dev patchelf build-essential file
 
-      # The tests must pass on the machine that builds the installer, not
+      # The tests must pass on the machine that builds the binary, not
       # merely on some other machine earlier.
       - name: Test
         run: cargo test --workspace --release
@@ -114,12 +107,6 @@ jobs:
           else
             cargo build --release -p mukti-cli
           fi
-
-      - name: Build the app installer
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
-        with:
-          projectPath: crates/mukti-app
-          args: --target ${{ matrix.target }}
 
       - name: Collect what was built
         shell: bash
@@ -158,30 +145,21 @@ jobs:
               || { echo "the universal binary is not universal"; exit 1; }
           fi
 
-          # Installers, wherever this platform's bundler put them.
+          # No installers are collected, because none are built. Until
+          # 15 August 2026 this project also shipped a desktop window and its
+          # bundles; it is now a command-line tool and a library, so the one
+          # artefact per platform is the binary named above.
           #
-          # .rpm is included: bundle.targets is "all", so Linux builds one, and it
-          # was being built and then silently dropped.
-          #
-          # And no `|| true` on the end. That swallowed a total failure to find any
-          # installer at all — and `if-no-files-found: error` on the upload would
-          # still have passed, because the command-line binary was in out/. So a
-          # release with no installers in it could look completely green.
-          find target -path '*/release/bundle/*' \
-            \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' \
-               -o -name '*.AppImage' -o -name '*.rpm' \) \
-            -exec cp {} out/ \;
-
-          # Say what an installer actually is on this platform, and fail if none
-          # arrived. Counting is the check; listing is for a human reading the log.
-          installers=$(find out -type f \
-            \( -name '*.dmg' -o -name '*.msi' -o -name '*.exe' -o -name '*.deb' \
-               -o -name '*.AppImage' -o -name '*.rpm' \) | wc -l | tr -d ' ')
-          if [ "$installers" -eq 0 ]; then
-            echo "no installer was produced for ${{ matrix.target }}"
-            exit 1
+          # The check that replaces the installer count: the binary must exist and
+          # must run. A release whose binary does not start is worse than no
+          # release, and asserting the file is present says nothing about that.
+          binary=$(find out -type f | head -1)
+          [ -n "$binary" ] || { echo "nothing was collected"; exit 1; }
+          if [ "${{ runner.os }}" != "Windows" ]; then
+            chmod +x "$binary"
+            "$binary" --version || { echo "the binary does not run"; exit 1; }
           fi
-          echo "$installers installer(s) for ${{ matrix.target }}:"
+          echo "collected for ${{ matrix.target }}:"
           ls -la out
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -204,6 +182,6 @@ jobs:
         with:
           files: all/**/*
           # A draft, never a live release. Publishing is a decision a person
-          # makes, after reading the notes and trying at least one installer.
+          # makes, after reading the notes and running at least one binary.
           draft: true
           generate_release_notes: true

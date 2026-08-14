@@ -47,8 +47,9 @@
 # encoding** — which byte means which character — and those live in
 # crates/mukti-core/src/tables.rs with their evidence written beside them.
 # Nothing here is needed to build, test or measure Mukti.
-bijoy_fonts.zip
-Bijoy Linux.zip
-Bijoy Bangla Typing Nirdeshika.pdf
-Bijoy_Typing/
+# Named by pattern rather than by title, so the ignore list does not itself
+# catalogue which of the vendor's materials happen to be on this machine.
+*.zip
 *.webarchive
+Bijoy*/
+Bijoy*.pdf

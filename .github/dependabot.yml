@@ -23,7 +23,7 @@ updates:
     commit-message:
       prefix: "ci"
 
-  # Rust dependencies. Grouped, because the Tauri tree is large and a separate
+  # Rust dependencies. Grouped, because a separate
   # pull request per crate would bury the ones that matter.
   - package-ecosystem: "cargo"
     directory: "/"
@@ -33,16 +33,6 @@ updates:
     commit-message:
       prefix: "deps"
     groups:
-      # Tauri and its plugins move together; splitting them produces pull
-      # requests that cannot build on their own.
-      tauri:
-        patterns:
-          - "tauri"
-          - "tauri-*"
-      # Everything that reads a file somebody else supplied. These are the
-      # dependencies where a missed update is a security problem rather than an
-      # inconvenience, so they are grouped to be seen together and reviewed
-      # first — `lopdf` and `quick-xml` are the two that were already caught out.
       file-parsers:
         patterns:
           - "lopdf"
@@ -52,8 +42,6 @@ updates:
         patterns:
           - "*"
         exclude-patterns:
-          - "tauri"
-          - "tauri-*"
           - "lopdf"
           - "quick-xml"
           - "zip"

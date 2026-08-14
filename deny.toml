@@ -48,78 +48,20 @@ unsound = "all"
 # found three real vulnerabilities in the file parsers (lopdf and quick-xml), all
 # published after the original hand audit. Those were fixed by upgrading, not
 # ignored. That is the difference this file is for.
-ignore = [
-    # RUSTSEC-2024-0429 — unsoundness in `glib`'s `VariantStrIter`, whose
-    # `Iterator` and `DoubleEndedIterator` impls can hand out overlapping
-    # references. **Not an unmaintained notice: a soundness bug.**
-    #
-    # Reached only through GTK3, which is Tauri's Linux web-view backend, so it
-    # is absent from the macOS and Windows builds entirely. Mukti never
-    # constructs a `VariantStrIter` itself; it would have to be reached through
-    # GTK's own internals. The version is pinned by Tauri, so it cannot be
-    # bumped here without forking the whole GTK stack.
-    #
-    # What would change this: Tauri moving to GTK4, or glib publishing a fixed
-    # 0.18.x. Re-check at every release.
-    "RUSTSEC-2024-0429",
-
-    # ---------------------------------------------------------------------
-    # The GTK3 bindings — ten crates, Linux only
-    # ---------------------------------------------------------------------
-    # Tauri v2 draws its window on Linux through GTK3, and the Rust bindings to
-    # GTK3 were retired when their authors moved to GTK4. Measured 13 Aug 2026:
-    # 11 GTK crates in the Linux dependency graph, **zero** on macOS. So this
-    # affects the Ubuntu build only; the Mac and Windows builds use WebKit and
-    # WebView2 and never compile any of it.
-    #
-    # Not fixable here. They arrive through Tauri, and no amount of work in this
-    # project removes them. Every Tauri v2 Linux application carries the same
-    # notices.
-    #
-    # Revisit when: Tauri moves off GTK3, or any of these turns into a real
-    # vulnerability rather than a maintenance notice.
-    { id = "RUSTSEC-2024-0411", reason = "gdkwayland-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-    { id = "RUSTSEC-2024-0412", reason = "gdk — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-    { id = "RUSTSEC-2024-0413", reason = "atk — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-    { id = "RUSTSEC-2024-0414", reason = "gdkx11-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-    { id = "RUSTSEC-2024-0415", reason = "gtk — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-    { id = "RUSTSEC-2024-0416", reason = "atk-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-    { id = "RUSTSEC-2024-0417", reason = "gdkx11 — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-    { id = "RUSTSEC-2024-0418", reason = "gdk-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-    { id = "RUSTSEC-2024-0419", reason = "gtk3-macros — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-    { id = "RUSTSEC-2024-0420", reason = "gtk-sys — retired GTK3 binding, reaches us only via Tauri, Linux build only" },
-
-    # ---------------------------------------------------------------------
-    # proc-macro-error — build-time only
-    # ---------------------------------------------------------------------
-    # A helper for producing nice compiler messages from macros. Runs while the
-    # code is being compiled and no part of it exists in anything a user
-    # installs. Absent from the macOS graph entirely; on Linux it arrives with
-    # gtk3-macros, so it leaves when GTK3 does.
-    { id = "RUSTSEC-2024-0370", reason = "proc-macro-error — compile-time macro helper, never shipped; arrives with gtk3-macros on Linux" },
-
-    # ---------------------------------------------------------------------
-    # The unic-* family — five crates, all platforms
-    # ---------------------------------------------------------------------
-    # Unicode character-property tables, reached through Tauri. These are the
-    # only entries here that are present in the shipped binary on every platform,
-    # so they deserve the most scepticism.
-    #
-    # What they do bounds the risk: they answer questions like "is this character
-    # allowed to start an identifier?" from generated lookup tables. No parsing of
-    # attacker-controlled input, no allocation driven by input size, no I/O.
-    # "Unmaintained" here means the Unicode tables will not be updated for future
-    # Unicode versions — a staleness problem, not a safety one.
-    #
-    # Revisit when: Tauri drops them, or any becomes a real vulnerability. Unlike
-    # the GTK3 entries, do NOT wave these through on a future review without
-    # re-reading what they are used for.
-    { id = "RUSTSEC-2025-0075", reason = "unic-char-range — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
-    { id = "RUSTSEC-2025-0080", reason = "unic-common — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
-    { id = "RUSTSEC-2025-0081", reason = "unic-char-property — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
-    { id = "RUSTSEC-2025-0098", reason = "unic-ucd-version — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
-    { id = "RUSTSEC-2025-0100", reason = "unic-ucd-ident — unmaintained Unicode table crate via Tauri; pure table lookup, no untrusted parsing" },
-]
+# Empty, and that is the news. Until 15 August 2026 this list held sixteen
+# entries — a glib soundness bug, ten retired GTK3 bindings, a compile-time macro
+# helper and five unmaintained Unicode-table crates. **Every one of them arrived
+# through the desktop window's web-view layer, and every one left with it.**
+# Removing the window on 15 August 2026 took the entire GTK3 and unic dependency
+# tree out of the project, and `cargo deny` then reported all sixteen as
+# "no crate matched advisory criteria". They are deleted rather than kept as
+# commentary, because a stale ignore is worse than none: it trains the reader to
+# skim the list.
+#
+# Anything added here must say what it is, why it cannot simply be fixed, and
+# what would change that. Anything that cannot be written that way does not
+# belong here.
+ignore = []
 
 # ---------------------------------------------------------------------------
 # Licences
@@ -154,53 +96,13 @@ allow = [
 
 # Deliberately absent, and why:
 #   GPL / LGPL / AGPL / SSPL — incompatible with shipping this as MIT.
-#   MPL-2.0 — NOT blanket-allowed. It is weak, file-level copyleft, which is
-#             acceptable here, but only as a named decision. See the exceptions
-#             below, which permit it for exactly five crates and nothing else.
-#             A sixth MPL dependency arriving should make someone think, not
-#             sail through.
-
-# ---------------------------------------------------------------------------
-# MPL-2.0, permitted for five named crates only
-# ---------------------------------------------------------------------------
-# Established by measurement on 13 August 2026, not assumption:
-#
-#   * All five reach the project through Tauri's web-view layer — four via
-#     `dom_query` → `tauri-utils`, and `option-ext` via `dirs-sys` → `dirs`.
-#   * They ARE in the desktop app's runtime dependency graph, so they ship.
-#   * They are absent from all three publishable crates — `gru953-mukti`,
-#     `mukti-formats` and `mukti-cli` each have zero MPL dependencies, verified
-#     with `cargo tree --edges normal`. The library and command-line tool carry
-#     no MPL obligation at all.
-#   * MPL-2.0 is file-level copyleft and explicitly permits distribution inside
-#     a larger differently-licensed work. Mukti uses all five unmodified,
-#     straight from crates.io, so the only duty is to say so and to point at the
-#     source — which `THIRD-PARTY-LICENSES` lines 147-155 already does, naming
-#     each crate. This exception simply makes that existing, considered decision
-#     machine-checkable instead of a claim in a text file.
-#
-# If any of these is ever modified rather than used as published, the obligation
-# changes and this comment stops being true. Do not modify them.
-
-[[licenses.exceptions]]
-name = "cssparser"
-allow = ["MPL-2.0"]
-
-[[licenses.exceptions]]
-name = "cssparser-macros"
-allow = ["MPL-2.0"]
-
-[[licenses.exceptions]]
-name = "dtoa-short"
-allow = ["MPL-2.0"]
-
-[[licenses.exceptions]]
-name = "selectors"
-allow = ["MPL-2.0"]
-
-[[licenses.exceptions]]
-name = "option-ext"
-allow = ["MPL-2.0"]
+#   MPL-2.0 — not allowed at all, and no longer needed. Five MPL crates used to
+#             be permitted by name (`cssparser`, `cssparser-macros`,
+#             `dtoa-short`, `selectors`, `option-ext`); all five reached the
+#             project through the desktop window's web view and left with it on
+#             15 August 2026. The exceptions are deleted, so an MPL dependency
+#             arriving now fails the check and has to be argued for, which is the
+#             right default.
 
 [[licenses.clarify]]
 # The `fst` crate is dual Unlicense/MIT; state it rather than rely on detection.
@@ -212,7 +114,7 @@ license-files = []
 # What may be depended on at all
 # ---------------------------------------------------------------------------
 [bans]
-multiple-versions = "warn"   # the Tauri tree makes some duplication unavoidable
+multiple-versions = "warn"   # a transitive tree will always duplicate something
 wildcards = "deny"           # never depend on "*"; a build must be reproducible
 highlight = "all"
 

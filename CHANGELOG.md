@@ -1,5 +1,62 @@
 # Changelog
 
+## 0.6.0 — 15 August 2026
+
+### Removed
+
+- **The desktop window.** Mukti is now a command-line tool and a library, and
+  nothing else. The window shipped in 0.3.0 and was made to work properly in
+  0.5.0, so this is not a retreat from something broken — it is a decision to keep
+  one thing working well rather than two adequately. Everything the window did the
+  command line does, including converting a whole folder in one command, which the
+  window never could.
+
+  Going with it: the four embedded typefaces, the brand colour tokens, the two
+  GRU953 marks, and the webkit and GTK dependencies that made the Linux build need
+  system packages. The licence notices for the fonts, the tokens and the marks have
+  gone too, because there is nothing left here for them to describe.
+
+- **Installers.** There is one file per platform now — the binary — rather than a
+  `.dmg`, `.msi`, `.exe`, `.deb`, `.AppImage` and `.rpm`. The release job checks
+  that each binary *runs* rather than merely that it exists.
+
+### Fixed
+
+- **A large spreadsheet no longer looks like a hang.** Rewriting a document cost
+  the number of runs times the number of pieces, because the function handing each
+  run its share of the text scanned the whole document to find it. Found by
+  converting an 8.1 GB archive: five spreadsheets never finished inside 300 seconds
+  and twelve took over thirty, every one an `.xlsx`. A 62 MB workbook took 61 ms to
+  read and **131 seconds** to convert — and converted nothing at all, having no
+  legacy Bangla in it.
+
+  Now linear. The same workbook takes **0.5 seconds**; a 98 MB one that never
+  finished takes 1.9. Proved to change nothing else by reconverting 492 real
+  documents and comparing against what the previous build wrote: all 492 identical.
+
+- **Byte 0xD0 is the conjunct `ণ্ড`, not a dash.** It had been a hyphen since the
+  tables were first ported. 123 occurrences across 27 words in the test archive
+  were coming out with a hyphen in the middle — `অর্থদ-` for `অর্থদণ্ড`. Settled
+  from the font itself, which draws the conjunct. Dictionary hit on real documents
+  rose from 94.023% to **94.053%**.
+
+- **118 legacy font families were not recognised.** The list matched 9 of the 127
+  families Bijoy ships. Rebuilt from the internal name tables of 498 font files.
+
+- **Two Unicode fonts were being treated as legacy** — `SutonnyOMJ` and
+  `SutonnyUniBanglaOMJ`, along with `+mj-lt`, which is not a font name at all but
+  an Office theme reference. 2,069 runs of already-correct Bengali were being
+  offered to the converter.
+
+- **Error messages no longer leak the parser's own wording.** A damaged file said
+  `invalid Zip archive: Could not find EOCD` or `CFB error: I/O error: failed to
+  fill whole buffer`. Both now say what a person can act on.
+
+### Changed
+
+- The Linux build needs no system packages, because nothing draws a window.
+
+
 ## 0.5.0 — 14 August 2026
 
 ### New
@@ -19,7 +76,7 @@
 
 - **PDF text no longer arrives in fragments.** A line break was emitted at every
   positioning instruction, so a word split for kerning came out on three lines:
-  `Md. Al`, `-`, `Hasan`. Breaks now happen only where the text moves down the
+  `Green`, `-`, `Belt`. Breaks now happen only where the text moves down the
   page. Measured across 40 documents: 62,389 lines became 27,726, and none got
   worse. The threshold comes from the data — across 385,372 consecutive runs the
   vertical step is sharply bimodal, with only 0.25% falling between the two modes.

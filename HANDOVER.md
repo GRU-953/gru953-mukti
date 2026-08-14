@@ -29,7 +29,6 @@ project's effort went.
       mukti-core/     conversion, detection, embedded dictionaries  (library)
       mukti-formats/  .docx .xlsx .pptx readers/writers, PDF reader (library)
       mukti-cli/      the `mukti` command                           (binary)
-      mukti-app/      the desktop app, Tauri v2                     (binary)
     devtools/         NOT shipped, NOT published
       lexicon-build/  word lists      ->  compressed dictionary
       corpus-label/   real documents  ->  labelled token dataset
@@ -75,21 +74,15 @@ Then:
 cargo test --workspace
 ```
 
-150 tests, all passing. Then the command-line tool:
+144 tests, all passing. Then the command-line tool:
 
 ```bash
 cargo run -p mukti-cli -- check <file>
 ```
 
-And the app:
-
-```bash
-cargo run -p mukti-app
-```
-
-Linux needs the WebKitGTK development packages first — the exact list is in
-[.github/workflows/release.yml](.github/workflows/release.yml), which installs
-them for the Ubuntu build.
+No system packages are needed on any of the three platforms — a Rust toolchain is
+the whole requirement. That became true on 15 August 2026 when the desktop window
+went; until then the Linux build needed the WebKitGTK development headers.
 
 ## 4. Read the code in this order
 
@@ -232,22 +225,23 @@ ones that will bite a newcomer.
 
 In rough order of value:
 
-1. ~~Open the app and use it.~~ **Done, 13 August 2026.** The window was inert
-   in 0.4.0 for two independent reasons — a missing configuration flag and a
-   missing permissions file — and both are fixed. The owner drove every control
-   by hand and confirmed it.
+1. ~~Open the app and use it.~~ **Closed, 15 August 2026 — there is no app.** The
+   window was inert in 0.4.0, was fixed and hand-verified on 13 August, and was
+   then removed entirely on 15 August in favour of doing one thing well. Mukti is
+   a command-line tool and a library.
 2. ~~Sample the residue.~~ **Done, 13 August 2026.** 200 words drawn with a
    recorded seed, classified against a scheme written down first, and a second
    rater with no knowledge of the project classified the same 200 blind. Three
    genuine mis-conversions in each. Real-document accuracy **99.909%**
    [99.737, 99.969], or 99.756% counting every unjudgeable case as an error.
-3. **Bangla interface.** All user-facing strings sit in one table in
-   [app.js](crates/mukti-app/ui/app.js). This is a translation job, not a
-   rebuild.
+3. **Bangla in the command's own messages.** The strings sit in the CLI's source
+   rather than a table, so this is now a small refactor plus a translation, not
+   just a translation. Lower value than it was: someone typing commands is
+   already reading English.
 4. **crates.io.** The crates are prepared and metadata is complete, but
    publishing needs a token belonging to the account owner. Publish in
    dependency order: `gru953-mukti`, then `mukti-formats`, then `mukti-cli`.
-5. **Code signing.** Installers are unsigned, so both macOS and Windows warn on
+5. **Code signing.** The binaries are unsigned, so both macOS and Windows warn on
    first launch. Needs a paid Apple developer account and a Windows certificate.
 6. **PDF layout.** Text is now joined into real lines rather than one fragment
    per positioning instruction, which removed 56% of the line breaks on a

@@ -234,7 +234,7 @@ const NEW_LINE_AT_FONT_SIZES: f64 = 0.5;
 /// A horizontal gap of at least this many font sizes, beyond where the previous
 /// run is estimated to have ended, means a space belongs between them.
 ///
-/// Runs that continue a word — `Ultra`, `-`, `Poor` — butt up against each
+/// Runs that continue a word — `Green`, `-`, `Belt` — butt up against each
 /// other and must not gain a space. Two cells of a table row do not, and must.
 const SPACE_AT_FONT_SIZES: f64 = 0.2;
 
@@ -287,7 +287,7 @@ fn page_text(
     // Before 14 August 2026 none of this was tracked: every positioning
     // operator simply emitted a line break, so a word split across three runs
     // for kerning came out on three lines and real prose arrived as confetti —
-    // `Md. Al`, `-`, `Hasan`. A break now happens only where the text actually
+    // `Green`, `-`, `Belt`. A break now happens only where the text actually
     // moves down the page.
     let mut ctm = Transform::IDENTITY;
     let mut saved: Vec<Transform> = Vec::new();
@@ -654,11 +654,11 @@ mod tests {
         // Three runs, same baseline, each in its own text object, butted up
         // against each other: they must become one word, with no break.
         let text = extract(
-            "BT /F1 12 Tf 1 0 0 1 72 700 Tm (Ultra) Tj ET\n\
+            "BT /F1 12 Tf 1 0 0 1 72 700 Tm (Green) Tj ET\n\
              BT /F1 12 Tf 1 0 0 1 102 700 Tm (-) Tj ET\n\
-             BT /F1 12 Tf 1 0 0 1 108 700 Tm (Poor) Tj ET",
+             BT /F1 12 Tf 1 0 0 1 108 700 Tm (Belt) Tj ET",
         );
-        assert_eq!(text.trim(), "Ultra-Poor", "runs on one baseline were split");
+        assert_eq!(text.trim(), "Green-Belt", "runs on one baseline were split");
     }
 
     #[test]

@@ -21,60 +21,52 @@ Works completely offline. No account, no upload, no network.
 
 ---
 
-> ## ⚠️ If you have v0.4.0, please replace it
+> ## ⚠️ The desktop window is gone as of 0.6.0
 >
-> **v0.5.0 fixes two faults that were in v0.4.0.** It is out now — the download
-> links are below.
+> Mukti is now **only** a command-line tool. The window shipped in 0.3.0 through
+> 0.5.0 and has been removed — one thing done well rather than two adequately.
 >
-> **1. The desktop app's window did not respond.** It opened and looked correct,
-> but nothing worked — typing, the buttons, opening a file, drag-and-drop. One
-> missing setting stopped the window's code from starting at all, and a missing
-> permissions file would independently have blocked *Open*, *Save as…* and
-> drag-and-drop. It was never caught because no automated check had ever opened
-> the window. Nothing was wrong with the conversion itself. Both causes are
-> fixed, and a test now fails if either returns.
+> **If you used the window:** everything it did, the command line does. Converting
+> a whole folder is one command rather than one file at a time, which the window
+> could never do.
 >
-> **2. A malformed file could crash it.** Three flaws in the libraries Mukti uses
-> to read PDF and Office files were published after v0.4.0 was built
+> **If you are on 0.4.0, upgrade regardless of which you used.** That version had
+> two faults: the window did not respond to anything, and three flaws in the
+> libraries that read PDF and Office files
 > ([RUSTSEC-2026-0187](https://rustsec.org/advisories/RUSTSEC-2026-0187),
 > [-0194](https://rustsec.org/advisories/RUSTSEC-2026-0194),
-> [-0195](https://rustsec.org/advisories/RUSTSEC-2026-0195)). A deliberately
-> crafted PDF could stop the program, and a crafted Office file could make it
-> consume all available memory. Your own documents would not do this. Fixed by
-> upgrading, and the check that finds such flaws now runs as part of the build.
+> [-0195](https://rustsec.org/advisories/RUSTSEC-2026-0195)) meant a crafted file
+> could stop the program or exhaust its memory. Both are fixed.
 >
-> **Files you converted with the v0.4.0 command-line tool are fine.** That tool
-> was unaffected by the first fault, and nothing about the conversion itself has
-> changed since.
+> **Anything you converted with an earlier command-line tool is fine.** That part
+> always worked, and the conversion itself has only improved since.
 
 ---
 
 ## Install
 
-Download from the [latest release](https://github.com/GRU-953/gru953-mukti/releases/latest).
+Download from the [latest release](https://github.com/GRU-953/gru953-mukti/releases/latest)
+and put the file on your `PATH`.
 
 | Your computer | Download |
 |---|---|
-| **macOS** (Intel or Apple silicon) | `GRU953.Mukti_0.5.0_universal.dmg` |
-| **Windows** | `GRU953.Mukti_0.5.0_x64-setup.exe` |
-| **Ubuntu / Debian** | `GRU953.Mukti_0.5.0_amd64.deb` |
-| **Other Linux** | `GRU953.Mukti_0.5.0_amd64.AppImage` |
+| **macOS** (Intel or Apple silicon) | `mukti-universal-apple-darwin` |
+| **Windows** | `mukti-x86_64-pc-windows-msvc.exe` |
+| **Linux** | `mukti-x86_64-unknown-linux-gnu` |
 
-For the command line, download the `mukti-*` file for your platform and put it
-on your `PATH`.
+On macOS and Linux, make it executable first: `chmod +x mukti-*`.
 
-> **The installers are not signed.** macOS will say "unidentified developer" —
-> right-click the app, choose *Open*, then *Open* again. Windows SmartScreen
-> will warn — click *More info*, then *Run anyway*. Signing needs paid
-> certificates from Apple and a certificate authority; neither is set up.
+> **The binaries are not signed.** macOS may say "unidentified developer" — allow
+> it once in *System Settings → Privacy & Security*. Windows SmartScreen may warn:
+> *More info*, then *Run anyway*. Signing needs paid certificates from Apple and a
+> certificate authority, and neither is set up.
+
+**Mukti is a command-line tool.** There was a desktop window until version 0.5.0;
+it was removed in 0.6.0 to keep one thing working well rather than two adequately.
+Everything it did, the command line does — and more, because it converts whole
+folders in one go.
 
 ## Use it
-
-**In the app:** paste text on the left, or drop a file on the window. The result
-appears on the right. **Show what changed** marks every word Mukti touched, so
-you can check its judgement rather than trust it.
-
-**On the command line:**
 
 ```sh
 mukti check report.docx     # say what would change, write nothing
@@ -82,7 +74,8 @@ mukti convert report.docx   # writes report.unicode.docx, formatting intact
 mukti convert *.txt         # many files at once
 ```
 
-Your original is never overwritten unless you type `--in-place`.
+Your original is never overwritten unless you type `--in-place`. A file Mukti
+named itself is never replaced unless you add `--force`.
 
 ## What it handles
 
@@ -271,26 +264,24 @@ rules, and two dictionaries built into the binary: 451,348 Bangla words and
 ## Build it yourself
 
 ```sh
-cargo test --workspace     # 150 tests, no network needed
-cargo run -p mukti-app    # the desktop app
+cargo test --workspace     # 144 tests, no network needed
 cargo run -p mukti-cli    # the command-line tool
 ```
 
-The dictionaries are compiled and checked in, so building needs no corpus and no
-network. Linux also needs `libwebkit2gtk-4.1-dev` and friends — the exact list
-is in `.github/workflows/release.yml`.
+The dictionaries are compiled and checked in, so building needs no corpus, no
+network and no system libraries — a Rust toolchain is the only requirement, on
+all three platforms.
 
 | Crate | What it is |
 |---|---|
 | `crates/mukti-core` | The converter, the detector, the dictionaries |
 | `crates/mukti-formats` | Word, Excel, PowerPoint and PDF handling |
 | `crates/mukti-cli` | The `mukti` command |
-| `crates/mukti-app` | The desktop app (Tauri) |
 | `devtools/` | Dictionary builder, corpus labeller, accuracy harness. Not shipped |
 
 ## Known limitations
 
-- Installers are **not signed**; the first launch warns.
+- The binaries are **not signed**; the first run warns that the maker cannot be checked.
 - Older `.doc`, `.xls`, `.ppt` are read, but **only their text**. Formatting,
   tables and images are not carried across, and because these formats record no
   font, the conversion is decided from the words alone — the same accuracy as a

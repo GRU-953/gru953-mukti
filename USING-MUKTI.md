@@ -3,18 +3,18 @@
 A short guide for anyone who has old Bangla documents that come out as
 gibberish. No technical knowledge assumed.
 
-> ## ⚠️ If you have version 0.4.0, please install 0.5.0
+> ## ⚠️ There is no longer a window — Mukti is a typed command
 >
-> In **version 0.4.0** the window opened and looked right, but **nothing in it
-> responded**: not typing, not the buttons, not dragging a file in. That was our
-> fault, not yours. **Version 0.5.0 fixes it.**
+> Versions 0.3.0 to 0.5.0 also came as an app with a window. **From 0.6.0 it does
+> not.** Everything the window did, the typed command does, and it can convert a
+> whole folder in one go, which the window never could. This guide is written for
+> someone who has never used a command before.
 >
-> The same version also fixes a fault where a damaged or deliberately malicious
-> PDF or Office file could make the program stop unexpectedly or use up your
-> computer's memory. Your own ordinary documents would not have done this.
->
-> **Anything you converted with the 0.4.0 command-line tool is fine.** That part
-> always worked, and the conversion itself has not changed.
+> **If you are on 0.4.0, please upgrade whichever you used.** In that version the
+> window opened but nothing in it responded, and a damaged or deliberately
+> malicious PDF or Office file could stop the program or use up your computer's
+> memory. Both are fixed. Anything you converted with the 0.4.0 command is fine —
+> the conversion itself has not changed.
 
 ## What problem this solves
 
@@ -29,27 +29,32 @@ phone understands.
 **It changes only the legacy Bangla.** English, numbers, and Bangla that is
 already correct are left exactly as they were.
 
-## Using the app
+## Getting it onto your computer
 
-1. Open **GRU953 Mukti**.
-2. Paste your text into the box on the left, or drag a file onto the window.
-3. The result appears on the right, straight away.
-4. Click **Show what changed** to see exactly which words Mukti touched.
-   Converted words are tinted and underlined; everything else it left alone.
-5. Click **Copy** to take the result, or **Save as…** to write a file.
+1. Go to the project's **Releases** page and download the file for your computer:
+   `mukti-macos` for a Mac, `mukti-windows.exe` for Windows, `mukti-linux` for
+   Linux.
+2. Put it somewhere you can find again — your home folder is fine.
+3. Open your computer's command window: **Terminal** on a Mac (press ⌘ + Space,
+   type `Terminal`, press Return), or **PowerShell** on Windows (press the Start
+   key, type `PowerShell`, press Return).
+4. On a Mac or Linux, allow the file to run by typing this once, then Return:
 
-The line at the bottom always tells you how many words changed. If it says
-"3 of 16 words converted", the other 13 came through untouched.
+```bash
+chmod +x ./mukti-macos
+```
 
-### Converting a whole document
+5. Check it works. Type this, then Return — it should print a version number:
 
-Drag a Word, Excel or PowerPoint file onto the window, or use **Open a file**.
-Mukti converts the Bangla inside it and leaves the formatting, tables and
-pictures exactly as they were.
+```bash
+./mukti-macos --version
+```
 
-## Using it from the command line
+Everywhere below, `mukti` means the name of the file you downloaded.
 
-If you have many files, this is much faster.
+## Using it
+
+Each step is one line you type, then Return.
 
 **See what would change, without changing anything:**
 
@@ -112,10 +117,11 @@ as ordinary running text. Some PDFs convert well, some poorly. Where Mukti
 cannot read a piece of text safely, it leaves it out and tells you how much,
 rather than inventing Bangla that looks convincing and is wrong.
 
-**The first time you open the app** your computer may warn you it is from an
-unidentified developer. That is because the app is not signed with a paid
-certificate. On a Mac: right-click the app and choose *Open*, then *Open*
-again. On Windows: click *More info*, then *Run anyway*.
+**The first time you run it** your computer may say it cannot check who made it.
+That is because the file is not signed with a paid certificate, not because
+anything is wrong with it. On a Mac, open **System Settings → Privacy &
+Security**, find the message about `mukti`, and click *Open Anyway*. On Windows,
+click *More info*, then *Run anyway*.
 
 ## It will not write over a file it named itself
 
@@ -141,10 +147,10 @@ Three ways forward:
 be damaged, or it may be a newer file that has simply been given an old name.
 Try renaming it with an `x` on the end: `.docx`, `.xlsx` or `.pptx`.
 
-**Bangla shows as boxes or question marks** — this should not happen in the
-app, which carries its own Bangla font. If you see it in a converted file
-opened elsewhere, that programme is missing a Bangla font; install *Noto Sans
-Bengali*, which is free.
+**Bangla shows as boxes or question marks** — the conversion is fine; whatever
+you are viewing it in has no Bangla font. Install *Noto Sans Bengali*, which is
+free. Some command windows cannot draw Bangla at all, so check a converted file
+in Word or a browser rather than on screen.
 
 **A word did not convert** — Mukti was not confident enough. This happens
 most with single words, names, and text that is mostly numbers. Converting the
