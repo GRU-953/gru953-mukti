@@ -119,7 +119,11 @@ fn classify_font(dictionary: &lopdf::Dictionary) -> FontKind {
         .map(|n| String::from_utf8_lossy(n).to_string())
         .unwrap_or_default();
     let lower = base.to_lowercase();
-    let legacy = CERTAIN_LEGACY_FONTS.iter().any(|f| lower.contains(f));
+    // The same exclusions the Office reader applies, and they matter more here:
+    // this is the one place a font name alone causes bytes to be converted with
+    // no second opinion. `SutonnyOMJ` matched `sutonny` and is a Unicode font.
+    let legacy = crate::office::is_legacy_font(&base)
+        && CERTAIN_LEGACY_FONTS.iter().any(|f| lower.contains(f));
 
     // A simple font with a named base encoding is byte-addressed, and that is
     // the only case we can read. Anything else — a Differences array, an

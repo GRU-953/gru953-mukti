@@ -700,8 +700,47 @@ pub const LEGACY_FONTS: &[&str] = &[
 /// afterwards to catch what the release check missed.
 pub fn is_legacy_font(name: &str) -> bool {
     let lower = name.to_lowercase();
+    if NEVER_LEGACY.iter().any(|f| lower.contains(f)) {
+        return false;
+    }
+    // An OOXML theme reference, not a font name. `+mj-lt` is "major latin theme
+    // font"; `+mn-ea` is "minor east-asian". They are placeholders the document
+    // resolves against its theme, and `+mj-lt` matched the `mj` substring below
+    // in 233 runs of the measurement archive before this line existed.
+    if lower.starts_with('+') {
+        return false;
+    }
     LEGACY_FONTS.iter().any(|f| lower.contains(f))
 }
+
+/// Names that look legacy by substring and are **not**.
+///
+/// Every entry here was measured, not guessed. Widening the allow-list to cover
+/// all 127 vendor families on 14 August 2026 introduced these false positives,
+/// and the archive found them:
+///
+/// | Name | Runs in the archive | Already Unicode Bengali |
+/// |---|---|---|
+/// | `SutonnyOMJ` | 2,015 | **1,201 (60%)** |
+/// | `SutonnyUniBanglaOMJ` | 54 | **51 (94%)** |
+///
+/// `SutonnyOMJ` is settled by its own outline: the copy the vendor serves on
+/// their website has **97 codepoints in the Bengali block** U+0980–09FF and no
+/// glyph at all at 0xA9, 0x4B or 0xD0. It is a Unicode font whose name happens to
+/// end in `MJ`, and the vendor files it under "Unicode Fonts" in their own
+/// archive. `SutonnyUniBanglaOMJ` says `Uni` in its name and its runs are 94%
+/// already-Unicode.
+///
+/// Excluded by exact substring rather than by a rule about `omj`, because
+/// genuine legacy families collide with any such rule — `MonooMJ` lowercased
+/// ends in `omj` too.
+///
+/// **Why this matters more in the PDF reader than here.** In an Office document
+/// the word classifier refuses outright to touch anything already holding Unicode
+/// Bengali, so a wrong entry costs a font rename. In a PDF the font name is the
+/// whole authority, so a Unicode font on a legacy list means correct Bengali is
+/// put through the Bijoy tables.
+const NEVER_LEGACY: &[&str] = &["sutonnyomj", "sutonnyunibangla"];
 
 /// Is this text *exactly* the name of a legacy font, and nothing else?
 ///
@@ -1150,6 +1189,88 @@ fn span(pieces: &[Placed], from: usize, to: usize) -> String {
 #[cfg(test)]
 mod rewrite_tests {
     use super::*;
+
+    #[test]
+    fn a_unicode_font_is_never_taken_for_a_legacy_one() {
+        // Every one of these was a live false positive on 14 August 2026, when the
+        // allow-list was widened to cover all 127 of the vendor's legacy families
+        // and `mj` swept up three things it should not have.
+        for name in [
+            // A Unicode font whose name ends in MJ. Its own outline settles it:
+            // 97 codepoints in the Bengali block, no glyph at 0xA9 or 0x4B.
+            "SutonnyOMJ",
+            "SutonnyOMJ Bold",
+            "SutonnyUniBanglaOMJ",
+            // OOXML theme references, which are not font names at all.
+            "+mj-lt",
+            "+mj-ea",
+            "+mn-lt",
+            // Ordinary Unicode Bangla families, which must never be touched.
+            "Nikosh",
+            "NikoshBAN",
+            "SolaimanLipi",
+            "AdorshoLipi",
+            "Kalpurush",
+            "Siyam Rupali",
+            "Noto Sans Bengali",
+            "Nirmala UI",
+            "Vrinda",
+        ] {
+            assert!(
+                !is_legacy_font(name),
+                "{name} was taken for a legacy font; its text would be put through the Bijoy tables"
+            );
+        }
+    }
+
+    #[test]
+    fn the_real_legacy_families_are_still_recognised() {
+        // The families that actually ship with Bijoy, including the four variants
+        // a narrower list missed and the ones carrying no `MJ` at all.
+        for name in [
+            "SutonnyMJ",
+            "SutonnyMJ Bold",
+            "SutonnyBanglaMJ",
+            "SutonnySushreeMJ",
+            "Sutonny SushreeMJ",
+            "SonkhoMJ",
+            "KarnaphuliMJ",
+            "ChandrabatiMJ",
+            "ModhumatiMJ",
+            "MonooMJ",
+            "BrahmputraMJ",
+            "JaJaDiMJ",
+            "SulekhaT",
+            "SulekhaTC",
+            "Ajanta",
+            "Akash",
+            "Aloucik",
+            "Arin",
+            "Barsha",
+            "Godhuli",
+            "Lekhani",
+            "LipiBelyCon",
+            "LipiJuiCon",
+            "Pandit",
+            "Pandulipi",
+            "Patralekha",
+            "Ruposhi",
+            "Taposhi",
+            "Protik",
+            "Rabindric",
+            "Saroda",
+            "Srabonti",
+            "Sunetra",
+            "Susrhee",
+            "Tonushree",
+            "Anandapatra",
+        ] {
+            assert!(
+                is_legacy_font(name),
+                "{name} is a legacy family and was not recognised"
+            );
+        }
+    }
 
     #[test]
     fn a_self_closing_text_element_does_not_swallow_what_follows() {
