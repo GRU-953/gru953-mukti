@@ -94,6 +94,11 @@ Your original is never overwritten unless you type `--in-place`.
 | Older `.doc` `.xls` `.ppt` | Converted into a **new** `.docx`, `.xlsx` or `.pptx` beside the original. **Text only** — these formats hold no formatting we can carry, and no font information, so accuracy matches plain text rather than the higher figure above |
 
 Verified across **every one of 2,315 documents** in a real archive — not a sample.
+
+**127 legacy font families are recognised**, read from the internal name tables of the
+fonts Bijoy ships rather than guessed from filenames. Font names that merely look
+legacy are excluded on evidence: `SutonnyOMJ` is a Unicode font despite its name, and
+`+mj-lt` is not a font name at all but an Office theme reference.
 Word count and whitespace preserved, every archive entry intact, no legacy font left
 behind, and converting an already-converted file changes nothing further. That last
 one matters most: a converter that mangles its own output looks perfectly correct on
@@ -297,9 +302,17 @@ is in `.github/workflows/release.yml`.
   original.
 - The interface is **English only** for now. Every string sits in one table, so
   Bangla is a translation rather than a rebuild.
-- Tuned for **SutonnyMJ and SutonnyOMJ**. Other legacy fonts — Boishakhi,
-  Sulekha and the rest — appeared in too few documents to verify, so they are
-  not claimed.
+- **Measured on SutonnyMJ.** Every accuracy figure above comes from documents in
+  that font, which is what the test archive is overwhelmingly written in — half a
+  million text runs, against about a thousand for the next legacy font.
+  Mukti now *recognises* 127 legacy families, taken from the internal name tables
+  of the fonts Bijoy itself ships, but recognising a font is not the same as
+  having measured it, and only SutonnyMJ has been measured.
+- **`SutonnyOMJ` is deliberately treated as NOT legacy**, which corrects a claim
+  this page used to make. Despite the `MJ` in its name it is a Unicode font: the
+  copy its own vendor serves has 97 codepoints in the Bengali block and no glyph
+  at all where a legacy font keeps its letters. Its text is already correct, so
+  converting it would damage it.
 
 ## Contributing
 
