@@ -1165,10 +1165,35 @@ struct Placed {
 /// count-based version glued words together and lost newlines across a real
 /// 781-word document, taking it down to 465 words.
 fn span(pieces: &[Placed], from: usize, to: usize) -> String {
+    // Start at the first piece that reaches into this run, rather than walking
+    // the whole document to find it.
+    //
+    // `pieces` is built in document order with a cursor that only moves forward,
+    // so `start` never decreases and each piece begins exactly where the previous
+    // one ended. The pieces overlapping `[from, to)` are therefore one contiguous
+    // slice, and the ones before it are a prefix that `partition_point` can find
+    // in logarithmic time.
+    //
+    // **Why this matters.** This function was scanning every piece, and it is
+    // called once per run: N runs × N pieces. Converting an 8.1 GB archive on
+    // 14 August 2026 found five spreadsheets that never finished in 300 seconds
+    // and twelve that took over thirty, every one of them an `.xlsx`. Measured
+    // on synthetic workbooks, doubling the shared strings quadrupled the time —
+    // 4,000 strings 0.111s, 8,000 0.317s, 16,000 1.061s, 32,000 3.889s — while
+    // the same text stored inline was instant. Excel uses shared strings by
+    // default. One real 62 MB spreadsheet took **61 ms to read** and **131
+    // seconds to convert**, and converted nothing at all: it held no legacy
+    // Bangla.
+    //
+    // The behaviour is unchanged. The old loop skipped pieces ending at or before
+    // `from` and pieces starting at or after `to`; on a sorted contiguous list
+    // those are exactly a prefix and a suffix, so the same pieces are visited in
+    // the same order.
+    let first = pieces.partition_point(|piece| piece.end <= from);
     let mut out = String::new();
-    for piece in pieces {
-        if piece.end <= from || piece.start >= to {
-            continue;
+    for piece in &pieces[first..] {
+        if piece.start >= to {
+            break;
         }
         if piece.changed {
             // A converted word belongs to the run it starts in, and no other.
