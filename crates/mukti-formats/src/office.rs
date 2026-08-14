@@ -621,15 +621,71 @@ pub const LEGACY_FONTS: &[&str] = &[
     // and `SutonnySushreeMJ` — because matching is by substring and none of
     // those *contains* one of the three. Found on 14 August 2026 by making the
     // PDF reader's list a tested subset of this one.
-    "sutonny",
+    // 14 August 2026: rebuilt against the vendor's own font collection.
+    //
+    // 498 font files were read — the 92 families shipped with Bijoy for Linux
+    // plus 130 more — taking each file's internal family name from its `name`
+    // table rather than its filename, because the two disagree often (three
+    // files called `PareshMJ_*` all report `ParashMJ`; `SumeshwariMJ-Bold`
+    // reports `Sumeshwari71MJ`). That gives **127 distinct families**.
+    //
+    // The previous nine substrings matched **9 of those 127**. The 21 below are a
+    // proven minimum cover of all 127 — checked against a negative corpus of 149
+    // real non-legacy families including Nikosh, SolaimanLipi, Kalpurush, Siyam
+    // Rupali, Lohit Bengali, Vrinda, Nirmala UI and the Noto Bengali faces, none
+    // of which they match.
+    //
+    // `mj` alone covers 100 of the 127. The rest are the families that do not
+    // carry it.
+    "mj",
+    "ajanta",
+    "akash",
+    "aloucik",
+    "arin",
+    "barsha",
+    "bijoy",
+    "godhuli",
+    // Also catches SulekhaT, SulekhaTC and SulekhaTE, which carry no `MJ`.
+    "lekha",
+    // NOT bare `lipi`: that would match the Unicode fonts SolaimanLipi and
+    // AdorshoLipi, and converting text that is already Unicode is this
+    // project's worst failure.
+    "lipibelycon",
+    "lipiju",
+    // `pandit` and `pandulipi` rather than the shorter `pand` they share, and
+    // `ruposhi`/`taposhi` rather than `poshi`. Three extra entries buy specificity,
+    // and a false positive here corrupts text that was already correct.
+    "pandit",
+    "pandulipi",
+    "patra",
+    "ruposhi",
+    "taposhi",
+    "protik",
+    "rabindric",
+    "saroda",
+    "srabonti",
+    "sunetra",
+    "susrhee",
+    "tonushree",
+    // Kept although absent from both vendor sources, so their spelling is
+    // unverified here. They have been in this list since 0.3.0, they match
+    // nothing in the negative corpus, and removing a legacy font on no evidence
+    // is the same mistake as adding one — see LESSONS §3.
     "boishakhi",
     "bornosoft",
-    "sulekha",
+    // These two are redundant against `mj` for every family in the collection,
+    // and kept anyway because the PDF reader's stricter list names them and a
+    // test requires everything it matches to match here too. A font called
+    // plainly `Sutonny` or `Chandrabati`, with no `MJ`, would otherwise be
+    // converted on sight by the PDF path and left alone by this one.
+    "sutonny",
     "chandrabati",
-    "modhumatimj",
-    "adorsholipi",
-    "nikoshban",
-    "ekushey",
+    // REMOVED on evidence: `adorsholipi`, `nikoshban` and `ekushey` name
+    // **Unicode** Bangla families — AdorshoLipi, NikoshBAN, the Ekushey set —
+    // not legacy ASCII ones. Two independent lines agree: none of the three
+    // appears anywhere in the vendor's legacy collection, and the one archive
+    // PDF embedding NikoshBAN yields no Bijoy-looking text at all. Treating a
+    // Unicode font as legacy invites mangling text that is already right.
 ];
 
 /// Does this font name belong to a legacy Bangla font?

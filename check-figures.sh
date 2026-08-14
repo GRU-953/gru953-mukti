@@ -75,7 +75,7 @@ check "conversion, word accuracy"     "Word accuracy +[0-9.]+%"           "99.98
 check "character grid"                "Combinations correct +[0-9.]+%"    "100.000"
 check "detection recall"              "Recall on legacy words +99[0-9.]*%" "99.962"
 check "misspellings preserved"        "Misspellings preserved +[0-9.]+%"  "99.979"
-check "dictionary hit, real documents" "Output words in the dictionary +[0-9.]+%" "94.023"
+check "dictionary hit, real documents" "Output words in the dictionary +[0-9.]+%" "94.053"
 
 echo
 if [ "$fail" -ne 0 ]; then

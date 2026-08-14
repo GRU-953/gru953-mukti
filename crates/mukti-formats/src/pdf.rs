@@ -84,7 +84,12 @@ const CERTAIN_LEGACY_FONTS: &[&str] = &[
     "sulekha",
     "bornosoft",
     "chandrabati",
-    "adorsholipi",
+    // `adorsholipi` was here until 14 August 2026 and had to go. AdorshoLipi is
+    // a **Unicode** Bangla family, and this list is the one place a font name
+    // alone causes bytes to be converted with no second opinion — so a Unicode
+    // font named here means already-correct Bengali is put through the Bijoy
+    // tables. Nothing in the vendor's legacy collection of 127 families is
+    // called AdorshoLipi.
     "modhumatimj",
 ];
 

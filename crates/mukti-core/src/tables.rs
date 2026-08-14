@@ -176,7 +176,26 @@ pub static CONVERSION_MAP: &[(&str, &str)] = &[
     ("Í", "ত"),
     ("Î", "ত্র"),
     ("Ï", "দ্দ"),
-    ("Ð", "-"),
+    // 0xD0 is the conjunct ণ্ড, not a dash.
+    //
+    // It arrived as `-` from the upstream port and stood for a year, with FOCUS
+    // recording the doubt and LESSONS §3 forbidding a change without evidence
+    // from the font itself. That evidence now exists, from three directions:
+    //
+    // * the outline. Byte 0xD0 rendered from SutonnyMJ is the ণ্ড ligature. The
+    //   whole archive word `gvb`Ð` drawn in SutonnyMJ reads মানদণ্ড, and drawn
+    //   beside মানদণ্ড in a Unicode Bengali font it is the same word;
+    // * the corpus. 0xD0 occurs 123 times in 27 distinct words across 37
+    //   documents, every attributable run in SutonnyMJ. As `-` **none** of the
+    //   123 produced a dictionary word — কর্মকা-ে, মানদ-, ঠা-া, অর্থদ-. As ণ্ড,
+    //   104 of 123 do, and the remainder are run-split fragments that are still
+    //   correct Bengali;
+    // * the absence of a rival. 0xD1 is the em dash and 0xCA is an ornament, so
+    //   nothing else in the font wants this slot.
+    //
+    // 0xD0 does not occur anywhere in the English negative corpus, so this adds
+    // no false-positive surface.
+    ("Ð", "ণ্ড"),
     ("Ñ", "-"),
     ("Ò", "\""),
     ("Ó", "\""),

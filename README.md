@@ -171,16 +171,21 @@ at, as are runs whose declared font contradicts their own bytes.
 
 **Accuracy on real documents: about 99.9%, and here is how that is known.**
 
-The direct measurement is that **94.023%** of converted words, over real
-documents, are found in the dictionary (177,071 words). It was 94.015% until
-14 August 2026, when a fault found by this very study — a lost halant where a
-consonant carries both a reph and a conjunct — was fixed, and one more word began
-converting correctly. That is a **floor**, not an
-accuracy: names, places, acronyms and rare words are in no word list, so a
+The direct measurement is that **94.053%** of converted words, over real
+documents, are found in the dictionary (177,071 words). It has moved twice, both
+times upward and both times because a fault was found and fixed: 94.015% →
+94.023% when a lost halant was corrected, and → **94.053%** on 14 August 2026
+when byte 0xD0 was found to be the conjunct ণ্ড rather than a dash — 123
+occurrences across 27 words, every one of which had been coming out with a hyphen
+in the middle. That is a **floor**, not an accuracy: names, places, acronyms and rare words are in no word list, so a
 perfectly converted word can be missing from one. Earlier versions of this page
 reported 78.4%, which was simply wrong — it came from a superseded answer key.
 
-So the remaining **5.985%** (10,597 words) was sampled and read. 200 of them were
+So the remaining residue was sampled and read. The study below was run against
+the 5.985% that remained at 94.015%; the two later fixes each moved a handful of
+words out of the residue and into the dictionary, which cannot make the estimate
+below worse, but the study has not been re-run and the figures are the original
+ones. 200 of them were
 drawn at random with a recorded seed, so the same sample can be drawn again, and
 each was classified by hand with the original Bijoy shown beside the output —
 because the Bengali alone cannot separate "rare word" from "wrong word".

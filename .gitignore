@@ -34,3 +34,21 @@
 /fuzz/artifacts/
 /fuzz/corpus/
 /fuzz/target/
+
+# Third-party vendor material, supplied for analysis and NEVER redistributable.
+#
+# The Bijoy fonts are commercial products of their vendor and the typing guide is
+# their copyrighted documentation. This repository is public and MIT-licensed, so
+# committing any of it would be a licence violation — a much larger one than the
+# private-document trap LESSONS §14 records, because it is somebody else's
+# property rather than the owner's own.
+#
+# What this project may legitimately take from them is **facts about the
+# encoding** — which byte means which character — and those live in
+# crates/mukti-core/src/tables.rs with their evidence written beside them.
+# Nothing here is needed to build, test or measure Mukti.
+bijoy_fonts.zip
+Bijoy Linux.zip
+Bijoy Bangla Typing Nirdeshika.pdf
+Bijoy_Typing/
+*.webarchive
