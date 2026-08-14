@@ -673,7 +673,24 @@ pub fn convert_office(
     bytes: &[u8],
     unicode_font: &str,
 ) -> Result<(Vec<u8>, Summary), Box<dyn std::error::Error>> {
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes))?;
+    // The zip reader's own wording is not shown to anybody. An empty file gets
+    // "invalid Zip archive: Could not find EOCD", and the app puts whatever comes
+    // back here straight into the window. This has been true since 0.3.0, and it
+    // was found on 14 August 2026 by pointing the damaged-input tests at this
+    // path as well as at the newer one.
+    //
+    // The distinctions the reader draws are not ones a person can act on. What
+    // they can act on is: this is not a readable document of this kind.
+    let mut archive =
+        zip::ZipArchive::new(Cursor::new(bytes)).map_err(|_| -> Box<dyn std::error::Error> {
+            if bytes.is_empty() {
+                "the file is empty — there is nothing in it to convert".into()
+            } else {
+                "the file could not be read as a Word, Excel or PowerPoint document — it may be \
+             damaged or incomplete, or it may be a different kind of file with that name"
+                    .into()
+            }
+        })?;
     if archive.len() > MAX_ENTRIES {
         return Err(too_big("entries", archive.len() as u64, MAX_ENTRIES as u64));
     }

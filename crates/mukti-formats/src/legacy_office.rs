@@ -95,8 +95,27 @@ pub fn convert_legacy_office(bytes: &[u8], format: LegacyFormat) -> Result<Legac
         return Err("the file is empty — there is nothing in it to convert".to_owned());
     }
 
+    // The reader's own wording is not shown to anybody. It talks about CFB
+    // errors, sector shifts and failing "to fill whole buffer", and the app puts
+    // whatever comes back here straight into the window. Found on 14 August 2026
+    // by testing damaged files rather than only valid ones — every file in the
+    // measurement archive is well-formed, so the archive could never have shown
+    // this.
+    //
+    // Every failure here means the same thing to a person, whatever the parser
+    // called it: these bytes are not a readable file of this kind.
     let document = Document::from_reader(Cursor::new(bytes.to_vec()), format.reader_format())
-        .map_err(|e| format!("{e}"))?;
+        .map_err(|_| {
+            format!(
+                "the file could not be read as an older .{} — it may be damaged or \
+                 incomplete, or it may be a different kind of file with that name",
+                match format {
+                    LegacyFormat::Doc => "doc",
+                    LegacyFormat::Xls => "xls",
+                    LegacyFormat::Ppt => "ppt",
+                }
+            )
+        })?;
 
     // PowerPoint keeps its own path, because the old format records where each
     // slide starts and which text was a title. Throwing that away and working
