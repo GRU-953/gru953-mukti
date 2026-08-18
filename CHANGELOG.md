@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 — 19 August 2026
+
+A maintenance release. Nothing a user does changes; both items are about what the
+project depends on, and both were measured rather than assumed.
 
 ### Changed
 
@@ -36,6 +39,23 @@
   size — stated because the opposite would have been the easier claim to make.
 
   144 tests pass, clippy clean, formatting clean, `cargo deny` clean.
+
+- **Four GitHub Actions moved off the deprecated Node 20 runtime.**
+  `actions/checkout` v4 → v7.0.1, `actions/upload-artifact` v4 → v7.0.1,
+  `actions/download-artifact` v4 → v8.0.1 and `softprops/action-gh-release`
+  v2 → v3.0.2. Every 0.6.0 build logged a deprecation warning saying these were
+  being forced onto Node 24; this makes that explicit instead of accidental.
+
+  All four remain pinned by commit SHA, and each SHA was checked against the tag it
+  claims to be before it was trusted — `action-gh-release` v3.0.2 is an *annotated*
+  tag, so its ref points at a tag object rather than a commit, and it has to be
+  dereferenced before the two can be compared at all. The other three are
+  lightweight tags where the ref is the commit.
+
+  `action-gh-release` v3.0.0 is a runtime change only, with no altered inputs, so
+  the two this project passes (`files` and `draft`) are unaffected. It is
+  nonetheless the step that creates the release itself, so the whole workflow was
+  proved on a throwaway tag before this one was cut.
 
 
 ## 0.6.0 — 15 August 2026
