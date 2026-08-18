@@ -357,9 +357,9 @@ pub struct Piece {
 ///
 /// **The one place this decision is made.** Until 14 August 2026 this loop was
 /// written out four times — here, in `mukti_formats::convert_text_with_summary`,
-/// in the command-line tool's `convert_and_count` and in the app's
+/// in the command-line tool's `convert_and_count` and in every other
 /// `convert_str`. Four copies of a judgement is four chances for the tool and
-/// the window to disagree about the same file, and every accuracy figure this
+/// caller to disagree about the same file, and every accuracy figure this
 /// project publishes is a claim about *one* judgement. Everything else now
 /// counts or joins these pieces; nothing else decides.
 pub fn convert_pieces(input: &str) -> Vec<Piece> {

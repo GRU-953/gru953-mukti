@@ -90,9 +90,12 @@ jobs:
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
 
-      # Ubuntu 22.04 rather than latest: the webkit2gtk package name changed,
-      # and pinning it here means a release does not break the day the runner
-      # image moves on.
+      # Ubuntu 22.04 rather than latest, and the reason changed on 15 August 2026.
+      # It used to be that the webkit2gtk package name moved between images. No
+      # system packages are installed any more, so the reason now is glibc: the
+      # binary this runner produces requires at most GLIBC_2.34, which runs on
+      # Ubuntu 22.04, Debian 12 and RHEL 9. A newer runner would raise that floor
+      # and silently drop those distributions.
 
       # The tests must pass on the machine that builds the binary, not
       # merely on some other machine earlier.
@@ -187,13 +190,38 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      # Checked out for one reason: LICENSE and THIRD-PARTY-LICENSES are attached
+      # to the release beside the binaries. MIT and the four dependency licences
+      # that MIT cannot be elected in place of all require their notice to travel
+      # with the software, and until 15 August 2026 a person who downloaded a
+      # single binary and never opened the repository received none of them.
+      #
+      # Attached here rather than copied into each platform's artefact, so there is
+      # exactly one copy of each: three would collide on name, and a stray LICENSE
+      # in `out/` could be picked up as "the binary" by the does-it-run check.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: |
+            LICENSE
+            THIRD-PARTY-LICENSES
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: all
+      - name: Check the notices are actually there before drafting
+        run: |
+          set -euo pipefail
+          for f in LICENSE THIRD-PARTY-LICENSES; do
+            [ -s "$f" ] || { echo "$f is missing or empty; the release would ship without its notices"; exit 1; }
+          done
+          echo "notices present:"; ls -la LICENSE THIRD-PARTY-LICENSES
       - name: Draft the release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          files: all/**/*
+          files: |
+            all/**/*
+            LICENSE
+            THIRD-PARTY-LICENSES
           # A draft, never a live release. Publishing is a decision a person
           # makes, after reading the notes and running at least one binary.
           draft: true

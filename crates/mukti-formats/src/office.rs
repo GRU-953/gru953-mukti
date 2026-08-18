@@ -769,8 +769,8 @@ pub fn convert_office(
     unicode_font: &str,
 ) -> Result<(Vec<u8>, Summary), Box<dyn std::error::Error>> {
     // The zip reader's own wording is not shown to anybody. An empty file gets
-    // "invalid Zip archive: Could not find EOCD", and the app puts whatever comes
-    // back here straight into the window. This has been true since 0.3.0, and it
+    // "invalid Zip archive: Could not find EOCD", and a caller puts whatever comes
+    // back here straight in front of a person. This has been true since 0.3.0, and it
     // was found on 14 August 2026 by pointing the damaged-input tests at this
     // path as well as at the newer one.
     //

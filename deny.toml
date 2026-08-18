@@ -90,7 +90,11 @@ allow = [
     "CC0-1.0",
     "Unicode-3.0",
     "Unicode-DFS-2016",
-    "OFL-1.1",          # the bundled Noto fonts
+    # OFL-1.1 is kept allowed although nothing under it ships any more: the four
+    # embedded typefaces went with the desktop window on 15 August 2026. It costs
+    # nothing to leave, and removing it would make a future font dependency fail
+    # the build with a licence error rather than a design conversation.
+    "OFL-1.1",
     "CDLA-Permissive-2.0",
 ]
 

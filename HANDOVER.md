@@ -33,11 +33,12 @@ project's effort went.
       lexicon-build/  word lists      ->  compressed dictionary
       corpus-label/   real documents  ->  labelled token dataset
       eval/           the measurement harness
-    assets/brand/     the brand's CSS tokens
     .github/workflows/  CI on three platforms; release builds
 
-About 7,200 lines of Rust plus a small HTML/CSS/JS front end. No npm, no
-bundler, no framework.
+About 11,100 lines of Rust and nothing else — no HTML, no CSS, no JavaScript, no
+npm, no bundler, no framework. Until 15 August 2026 there was also a desktop
+window with a small web front end; it was removed, and `assets/brand/` went with
+it.
 
 **`devtools/` measures the project; it is not part of the product.** It stays
 in the repository because a claim you cannot reproduce is not a claim.
@@ -112,10 +113,17 @@ cargo run --release -p eval -- --corpus <corpus> --labels <labels> --split test
 |---|---|---|
 | Round-trip word accuracy | **99.989%** | 473,244 words |
 | Character grid | **100%** | 3,096 combinations |
-| Detection recall on legacy words | **99.951%** | 154,928 tokens |
-| False positives on English | **0.006%** | 462,074 tokens |
+| Detection recall on legacy words | **99.962%** | 177,079 tokens |
+| False positives on English | **0.014%** | 494,050 tokens |
 | False positives on Unicode Bangla | **0.000%** | 343,077 tokens |
 | Misspellings preserved unchanged | 99.979% | 14,214 pairs |
+
+**These are the re-measured figures, and they replace an earlier set that is
+still quoted in old release notes.** Detection recall was 99.951% of 154,928
+tokens and English false positives 0.006% of 462,074 on the superseded answer
+key. Recall barely moved; the false-positive rate went from 0.006% to 0.014%
+because the sample grew, and 0.014% is the number to quote. README.md carries the
+same table and is the authority if these two ever disagree again.
 
 Detection figures come from a **held-out** half of the data that was never
 inspected while tuning. The tuning half gave 99.962% and 0.014% — the agreement
@@ -159,9 +167,11 @@ Two honest caveats, both of which should stay attached to these numbers:
 
   So it is withdrawn rather than corrected, pending two things: measuring it
   again from scratch, and hand-classifying a sample of the words *not* found into
-  names, rare words and genuine errors. That sampling remains **the most valuable
-  open task in the project** — it is the only thing that turns this into a figure
-  anyone may quote.
+  names, rare words and genuine errors. **That sampling was done on 13 August
+  2026** — 200 words, recorded seed, pre-registered scheme, second blind rater —
+  and it produced the 99.908% [99.737, 99.969] real-document estimate in section
+  8 and in README.md. This paragraph described it as the top open task, which it
+  was when written and has not been since.
 
   The lesson generalises, and it is why the withdrawal is written out at length:
   a number copied from one report into a document outlives the report. Every

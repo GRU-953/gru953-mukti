@@ -498,7 +498,7 @@ pub fn detect(input: &str) -> Detection {
     //
     // Trial conversion does not help either, tempting as it sounds: the Bijoy
     // tables map the whole ASCII range, so *any* English sentence converts to
-    // Bengali-looking output. "Consultant: Riverbank Advisory Group" comes out
+    // Bengali-looking output. "Consultant: Example Widget Company" comes out
     // over 40% Bengali. That test was tried and discarded.
     //
     // What actually separates them is that English is English. Bijoy text is
@@ -1760,7 +1760,7 @@ mod tests {
         for line in [
             "═══════════════════════════════════════════════",
             "─────────────────────────────────────────────",
-            "Consultant: Riverbank Advisory Group LLC — New York",
+            "Consultant: Example Widget Company — Springfield",
             "•  Doc #1 — Board Charter / Terms of Reference",
             "Café résumé naïve — accented English is still English",
         ] {

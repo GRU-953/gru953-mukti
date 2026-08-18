@@ -158,15 +158,15 @@ whole document rather than a fragment usually helps, because Mukti reads the
 surrounding words to make up its mind.
 
 **A word converted that should not have** — this should be rare: measured at
-6 in every 100,000 English words. If you find one, it is worth reporting.
+14 in every 100,000 English words. If you find one, it is worth reporting.
 
 ## How accurate is it?
 
 Measured, not estimated:
 
 - **99.989%** of words convert correctly (from 473,244 words tested).
-- **99.951%** of legacy Bangla words are found and converted (from 154,928).
-- **0.006%** of English words are wrongly converted — about 6 in 100,000.
+- **99.962%** of legacy Bangla words are found and converted (from 177,079).
+- **0.014%** of English words are wrongly converted — about 14 in 100,000.
 - **0.000%** of Bangla that was already correct is touched.
 
 The full method, including what these figures *cannot* tell you, is in the

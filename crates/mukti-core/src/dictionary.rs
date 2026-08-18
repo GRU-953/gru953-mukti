@@ -137,7 +137,7 @@ mod tests {
         let d = Dictionary::shipped();
         // What English becomes when forced through the Bijoy tables. This is
         // exactly the case the dictionary exists to reject.
-        for noise in ["ঈড়হংঁষঃধহঃ", "জরাবৎনধহশ", "চৎড়মৎধসসব", "অহহবী"]
+        for noise in ["ঈড়হংঁষঃধহঃ", "ঊীধসঢ়ষব", "চৎড়মৎধসসব", "অহহবী"]
         {
             assert!(
                 !d.contains(noise),

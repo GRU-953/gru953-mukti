@@ -81,7 +81,7 @@ pub struct LegacyOutcome {
 
 /// The sentence to show a person after converting an old file.
 ///
-/// Kept here beside the conversion so the command-line tool and the app cannot
+/// Kept here beside the conversion so no two callers can
 /// drift into describing the same limitation two different ways.
 pub const PLAIN_TEXT_ONLY_NOTICE: &str =
     "Old .doc, .xls and .ppt files store no font information, so only the text \
@@ -96,8 +96,8 @@ pub fn convert_legacy_office(bytes: &[u8], format: LegacyFormat) -> Result<Legac
     }
 
     // The reader's own wording is not shown to anybody. It talks about CFB
-    // errors, sector shifts and failing "to fill whole buffer", and the app puts
-    // whatever comes back here straight into the window. Found on 14 August 2026
+    // errors, sector shifts and failing "to fill whole buffer", and a caller puts
+    // whatever comes back here straight in front of a person. Found on 14 August 2026
     // by testing damaged files rather than only valid ones — every file in the
     // measurement archive is well-formed, so the archive could never have shown
     // this.
@@ -150,7 +150,7 @@ pub fn convert_legacy_office(bytes: &[u8], format: LegacyFormat) -> Result<Legac
 }
 
 /// The font a converted document asks for. The same one the command-line tool
-/// and the app use, so all three produce identical documents.
+/// uses, so every caller produces identical documents.
 const UNICODE_FONT: &str = "Nirmala UI";
 
 /// Run the finished document through the ordinary Office converter once, so

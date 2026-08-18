@@ -13,11 +13,11 @@ Contents
   4. The `fst` crate — Unlicense OR MIT — how both dictionaries are stored
   5. Webster's Second International — public domain — the English word list
   6. Rust dependencies — an audited summary
-  7. Fonts — Noto Sans and Noto Sans Bengali, SIL OFL 1.1
+  7. Fonts, the brand tokens and the GRU953 marks — none of which ship any more
 
-Every one of the 484 packages in the dependency tree declares a licence, and
-all of them are permissive. Section 6 records the audit and names the five
-that are not simply MIT or Apache-2.0.
+Every one of the 157 packages in the dependency tree declares a licence, and all
+of them are permissive. Section 6 records the audit and names the four whose
+obligation survives this project's election of MIT.
 
 
 1. almehady/Bijoy-to-Unicode-File-Converter
@@ -129,19 +129,27 @@ one platform is worse than no guard at all.
 
 6. Rust dependencies
 ---------------------
-Audited at the Phase 7 release gate. 484 packages in the full tree, every one
-declaring a licence, all permissive. No GPL, AGPL or SSPL anywhere.
+Re-audited 15 August 2026, after the desktop window was removed. **157 packages**
+in the full tree, every one declaring a licence, all permissive. No GPL, AGPL or
+SSPL anywhere. The figure was 484 before the removal; the difference is the GTK
+and web-view tree, and the count is derived from the published `Cargo.lock` rather
+than remembered.
 
-Direct dependencies of the shipped crates:
+Direct dependencies of the shipped crates — the complete list, five of them:
 
   fst                 Unlicense OR MIT   the two embedded dictionaries
-  quick-xml           MIT                reading and writing Office XML
-  zip                 MIT                Office files are ZIP archives
+                                         (gru953-mukti)
   lopdf               MIT                reading PDFs
   office_oxide        MIT OR Apache-2.0  reading .doc, .xls and .ppt
-  calamine            MIT                reading older spreadsheets
+  quick-xml           MIT                reading and writing Office XML
+  zip                 MIT                Office files are ZIP archives
+                                         (the four above: mukti-formats)
 
-Where a package offers a choice of licences, this project takes **MIT**.
+`mukti-cli` declares no external dependency of its own. An earlier version of
+this file also listed `calamine`; that was wrong — it is not a dependency of this
+project and never has been in any commit.
+
+Where a package offers a **choice** of licences, this project takes **MIT**.
 
 **No package in the tree is MPL-2.0, and none is copyleft of any kind.** Five MPL
 packages used to be here — `cssparser`, `cssparser-macros`, `dtoa-short`,
@@ -149,11 +157,34 @@ packages used to be here — `cssparser`, `cssparser-macros`, `dtoa-short`,
 desktop window. They left with it on 15 August 2026. `deny.toml` now allows no
 MPL licence at all, so this cannot quietly change back.
 
-One package (`r-efi`) offers "MIT OR Apache-2.0 OR LGPL-2.1-or-later". The MIT
-option is taken; no LGPL obligation arises.
+**Four packages carry an obligation that electing MIT does not remove**, and they
+are named here because a blanket "we choose MIT" would be untrue of them. Each is
+in the runtime dependency tree of the shipped binary, verified with
+`cargo tree -p mukti-cli --edges normal --invert <package>`:
+
+  encoding_rs    0.8.35   (Apache-2.0 OR MIT) AND BSD-3-Clause
+                          The BSD-3-Clause part is AND-ed, so it applies whichever
+                          of the other two is chosen. Arrives via lopdf and
+                          office_oxide.
+  unicode-ident  1.0.24   (MIT OR Apache-2.0) AND Unicode-3.0
+                          Same structure: the Unicode licence applies regardless.
+                          Arrives via zip's proc-macro chain.
+  zlib-rs        0.6.7    Zlib
+                          No MIT option exists. Arrives via flate2, via lopdf.
+  zopfli         0.8.3    Apache-2.0
+                          No MIT option exists. Arrives via zip.
+
+All four are permissive and all four require only that their notice travel with
+the software, which is what this file does. None is copyleft.
+
+One further package (`r-efi`) offers "MIT OR Apache-2.0 OR LGPL-2.1-or-later".
+The MIT option is taken; no LGPL obligation arises. That is a genuine election,
+unlike the four above.
 
 Full licence texts for every dependency can be regenerated at any time with
-`cargo license` or `cargo about`.
+`cargo license` or `cargo about`. This file, and `LICENSE`, are attached to every
+GitHub release beside the binaries, so a person who downloads only a binary still
+receives the notices.
 
 7. Fonts, the brand tokens and the GRU953 marks
 -----------------------------------------------

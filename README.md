@@ -291,8 +291,10 @@ all three platforms.
   documents, 3 had tables whose rows cannot be reconstructed, so a figure may
   appear away from the row it belongs to. Check any converted table against the
   original.
-- The interface is **English only** for now. Every string sits in one table, so
-  Bangla is a translation rather than a rebuild.
+- The command's own messages are **English only** for now. They sit in the
+  command-line source rather than in a string table, so Bangla would be a small
+  refactor plus a translation. Lower value than it looks: somebody typing commands
+  is already reading English.
 - **Measured on SutonnyMJ.** Every accuracy figure above comes from documents in
   that font, which is what the test archive is overwhelmingly written in — half a
   million text runs, against about a thousand for the next legacy font.
@@ -308,7 +310,7 @@ all three platforms.
 ## Contributing
 
 Issues and pull requests welcome. If you find a word converted that should not
-have been — measured at 6 in every 100,000 English words — please report it with
+have been — measured at 14 in every 100,000 English words — please report it with
 the text. Those cases are the most valuable.
 
 Work happens on `development`; `main` is what was last released.
@@ -319,7 +321,8 @@ what is still open, and the traps that cost time here.
 
 ## Licence
 
-[MIT](./LICENSE). Third-party obligations, including the fonts and the word
-lists: [`THIRD-PARTY-LICENSES`](./THIRD-PARTY-LICENSES).
+[MIT](./LICENSE). Third-party obligations, including the word lists and the four
+dependency licences that MIT cannot be elected in place of:
+[`THIRD-PARTY-LICENSES`](./THIRD-PARTY-LICENSES). No fonts ship as of 0.6.0.
 
 More: [how to use it](./USING-MUKTI.md) · [what changed](./CHANGELOG.md)

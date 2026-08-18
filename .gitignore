@@ -11,8 +11,6 @@
 # The studio's working memory. Local to this machine, never shipped.
 /Dev-Memory/
 
-# Tauri regenerates these on every build; they are not source.
-/crates/mukti-app/gen/
 
 # The project-local build environment: its own Rust compiler and package cache.
 # Several gigabytes, entirely rebuildable, and specific to this machine. The

@@ -8,7 +8,7 @@
 //! | Input | Converts to |
 //! |---|---|
 //! | `Awd†mi bvgt … ZvwiLt` (real Bijoy) | `অফিসের নামঃ তারিখঃ` — real words |
-//! | `Consultant: Riverbank Advisory` (English) | `ঈড়হংঁষঃধহঃ জরাবৎনধহশ` — nonsense |
+//! | `Consultant: Example Widget` (English) | `ঈড়হংঁষঃধহঃ ঊীধসঢ়ষব` — nonsense |
 //!
 //! Every character-level test fails here, because both outputs are legal
 //! Bengali codepoints. Three separate attempts at character density and
@@ -182,7 +182,7 @@ mod tests {
     fn english_run_through_the_tables_is_rejected() {
         // What English actually becomes when forced through the Bijoy map.
         for text in [
-            "ঈড়হংঁষঃধহঃ: জরাবৎনধহশ অফারংড়ৎু এৎড়ঁঢ় খখঈ ্ত ঘবি ণড়ৎশ",
+            "ঈড়হংঁষঃধহঃ: ঊীধসঢ়ষব ডরফমবঃ ঈড়সঢ়ধহু ্ত ঝঢ়ৎরহমভরবষফ",
             "অহহবী ৪",
             "চৎড়মৎধসসব ড়ঢ়বৎধঃরড়হং",
             "ঈধভল্ক ৎল্কংঁসল্ক হধশুাব ্ত ধপপবহঃবফ ঊহমষরংয রং ংঃরষষ ঊহমষরংয",

@@ -2,6 +2,62 @@
 
 ## 0.6.0 — 15 August 2026
 
+### Corrected in the documents
+
+An independent audit of the 0.6.0 tree, run before it was published, found that
+removing the window had left a trail of statements that were no longer true. They
+are corrected here rather than after release.
+
+- **The published accuracy figures disagreed with each other.** `USING-MUKTI.md`
+  and `HANDOVER.md` still carried a superseded answer key — detection recall
+  99.951% of 154,928 tokens and English false positives 0.006% — while `README.md`
+  carried the re-measured 99.962% of 177,079 and **0.014%**. README was right.
+  The false-positive rate genuinely rose when the sample grew, and quoting the
+  older, flattering number in the two documents a user actually reads was the
+  wrong way round. README also contradicted its own table in one sentence.
+
+- **The licence audit's package count was wrong by a factor of three.** It stated
+  484 packages; the published `Cargo.lock` resolves **157**. The 484 figure
+  predated the window's removal.
+
+- **`calamine` was listed as a dependency.** It is not one, and never has been in
+  any commit. It was introduced into `THIRD-PARTY-LICENSES` during the window's
+  removal, in the same edit that took out the Tauri entries.
+
+- **"Where a package offers a choice of licences, this project takes MIT" was not
+  the whole truth.** Four packages in the shipped binary carry an obligation that
+  electing MIT does not remove — `encoding_rs` (BSD-3-Clause, AND-ed),
+  `unicode-ident` (Unicode-3.0, AND-ed), `zlib-rs` (Zlib only) and `zopfli`
+  (Apache-2.0 only). All four are permissive and all four are now named.
+
+- **The handover's repository map** still listed `assets/brand/` and claimed a
+  HTML/CSS/JS front end, with a line count out by about 4,000. There are now no
+  HTML, CSS or JavaScript files at all, and 11,100 lines of Rust.
+
+- Smaller ones: a `.gitignore` rule for the deleted app crate; an OFL-1.1 licence
+  entry justified by fonts that no longer ship; an `ubuntu-22.04` pin explained by
+  a webkit package name when the real reason is now glibc 2.34; four comments in
+  the shipped library describing text being pasted "into the window"; a README
+  claim that every interface string sits in one table; and a handover paragraph
+  calling the residue study the top open task two days after it was completed.
+
+### Fixed, and it is a licence matter
+
+- **The binaries shipped with no licence beside them.** Anyone who downloaded a
+  single file from the releases page received neither `LICENSE` nor
+  `THIRD-PARTY-LICENSES`, though MIT and all four of the licences above require
+  their notice to travel with the software. Both files are now attached to every
+  release, and the release job fails if either is missing or empty.
+
+- **Release assets were named after the Rust target triple**, so somebody wanting
+  the Linux build had to work out that they needed
+  `mukti-x86_64-unknown-linux-gnu`. They are now `mukti-macos`, `mukti-linux` and
+  `mukti-windows.exe`.
+
+- **A fabricated consultancy** — a company name with a legal form and a city —
+  was published as a test fixture, where all the test needs is nonsense. Replaced
+  with something that cannot be mistaken for a real organisation.
+
 ### Removed
 
 - **The desktop window.** Mukti is now a command-line tool and a library, and
