@@ -179,45 +179,68 @@ in the middle. That is a **floor**, not an accuracy: names, places, acronyms and
 perfectly converted word can be missing from one. Earlier versions of this page
 reported 78.4%, which was simply wrong — it came from a superseded answer key.
 
-So the remaining residue was sampled and read. The study below was run against
-the 5.985% that remained at 94.015%; the two later fixes each moved a handful of
-words out of the residue and into the dictionary, which cannot make the estimate
-below worse, but the study has not been re-run and the figures are the original
-ones. 200 of them were
-drawn at random with a recorded seed, so the same sample can be drawn again, and
-each was classified by hand with the original Bijoy shown beside the output —
-because the Bengali alone cannot separate "rare word" from "wrong word".
+So the remaining residue was sampled and read. **Twice** — the study was first run
+on 13 August 2026 against the residue as it then stood, and re-run on 19 August
+after two accuracy fixes had changed what the residue contained. The figures here
+are the re-run's; the first run's are kept below for comparison.
 
-| What the residue actually contains | of 200 |
+**400 words** were drawn at random from the 10,530-word residue with a recorded
+seed (`20260819`), so the same sample can be drawn again. Each was classified with
+the original Bijoy shown beside the output — because the Bengali alone cannot
+separate "rare word" from "wrong word" — by **three independent raters who saw only
+the word pairs and the classification rules**, could not see each other's answers,
+and were told nothing about what result was wanted.
+
+| What the residue actually contains | of 400 |
 |---|---|
-| The output is exactly what the source encodes | 187 |
-| **A genuine mis-conversion** | **3** |
-| The source was not a word at all — a fragment or a stray symbol | 4 |
-| A name | 1 |
-| Could not be judged honestly | 5 |
+| A genuine word, correctly converted, that no dictionary lists | **384** |
+| The source was not a word at all — a fragment or a stray symbol | 8 |
+| A name | 4 |
+| **A genuine mis-conversion** | **4** |
+| Could not be judged | 0 |
 
-Most of the residue is compound words, pairs joined by a slash or hyphen,
-transliterated English, and — most of all — **source misspellings that Mukti
-faithfully preserved**, which is exactly what it is supposed to do.
+So **97% of the residue is correctly converted text**: compounds, case-marked and
+inflected forms, pairs joined by a slash or hyphen, transliterated English,
+abbreviations, and — most of all — **source misspellings that Mukti faithfully
+preserved**, which is exactly what it is supposed to do.
 
-Correcting the floor by the measured mis-conversion rate:
+Correcting the floor by the measured mis-conversion rate gives **99.939%**
+[99.846, 99.976]. But a single voting rule would hide how much that depends on how
+disagreement between raters is resolved, so all three are given:
 
-| | Estimate |
-|---|---|
-| Treating the five unjudgeable cases as correct | **99.908%** [99.737, 99.969] |
-| Treating all five as errors | **99.756%** [99.530, 99.875] |
+| Rule for calling a word a mis-conversion | Faults | Estimate |
+|---|---|---|
+| **Any** one of the three raters said so | 8 | 99.879% [99.764, 99.938] |
+| A **majority** said so — the headline | 4 | **99.939%** [99.846, 99.976] |
+| **All three** said so | 2 | 99.970% [99.891, 99.992] |
 
-**Two checks on that.** A second rater, given only the word pairs and the
-classification rules and no knowledge of this project, independently found
-**exactly 3** mis-conversions — a partly different three, giving 99.909%. Raw
-agreement was 96% (Cohen's κ 0.607, depressed by how lopsided the categories are
-rather than by real disagreement). And the round-trip figure of 99.989% is an
-*upper* bound by construction: every estimate here sits below it, which is what a
-consistent pair of measurements must do.
+**The honest summary is "about 99.9%".** Anything finer over-reads the data.
 
-**What this still cannot tell you.** At 200 words the interval is roughly ±3
-points near these rates, so this settles "is the residue mostly names or mostly
-errors?" and will not support finer ranking. All 3 confirmed faults are the same
+**Three checks on that.** 377 of the 400 rows were unanimous, and of the 23 that
+were not, only 4 touched the rare-word/mis-conversion boundary the estimate
+actually depends on — most disagreement was about whether a fragment of source
+counted as a word at all, which changes what is *excluded*, not the fault count.
+Fleiss' κ was 0.596, depressed as before by how lopsided the categories are rather
+than by real disagreement. And the round-trip figure of 99.989% is an *upper* bound
+by construction: every estimate here sits below it, which is what a consistent pair
+of measurements must do.
+
+**The first run, for comparison.** 13 August 2026, 200 words, two raters, one of
+them a human with no knowledge of the project: 3 mis-conversions, giving **99.908%**
+[99.737, 99.969], or 99.756% counting all five unjudgeable cases as errors. Cohen's
+κ 0.607. **The re-run confirms that figure and roughly halves the uncertainty; it
+does not show an improvement.** The intervals overlap heavily, so the gap between
+99.908% and 99.939% is noise, not progress.
+
+**What this still cannot tell you.** One thing got *worse* between the runs: not a
+single one of the 1,200 judgements in the re-run used "cannot judge", where the
+human rater in the first run produced five. Raters who never abstain probably forced
+some genuinely ambiguous words into the "correct" column, and the direction of that
+bias is unknown. It also means the first run's honest floor — count every
+unjudgeable case as an error, 99.756% — has no counterpart here; the
+any-rater-said-so row of the table above, 99.879%, is the floor to quote instead.
+Neither run covers the 118 legacy font families added on 15 August, because the
+labelled corpus predates them. All 3 confirmed faults are the same
 kind — the **reph (`র্`) or a vowel sign landing on the wrong consonant**, plus one
 dropped character — which is a specific thing to fix rather than a vague error
 rate. And one honest note on method: the classification rules had to be clarified

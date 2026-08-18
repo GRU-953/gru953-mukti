@@ -134,14 +134,26 @@ Two honest caveats, both of which should stay attached to these numbers:
 - **Round-trip has a blind spot by construction.** If the encoder and decoder
   share a mistake, the text still comes back identical. That is why the real
   document measurement exists.
-- **DONE, 13 August 2026 — the residue was sampled, and this is no longer the
-  most valuable open task.** Estimated accuracy on real documents is **99.9%**
-  (conservative floor 99.76%). The method, the classification counts, the
-  independent second rating and the confidence intervals are all in `README.md`
-  under Accuracy. The three confirmed faults are all the same kind: the reph
-  (`র্`) or a vowel sign landing on the wrong consonant, plus one dropped
-  character. That is a specific defect class to attack, and `LESSONS.md` §3
-  already records that this is exactly where guards go wrong.
+- **DONE, and re-run 19 August 2026.** Estimated accuracy on real documents is
+  **99.939%** [99.846, 99.976] — honestly, "about 99.9%", with a floor of 99.879%
+  if any single rater's judgement of a fault is accepted. 400 words, seed
+  `20260819`, three independent blind raters, full write-up in
+  `local/residue-study-2026-08-19.md` and summarised in `README.md`.
+
+  **The re-run confirmed the 13 August figure rather than improving on it** — the
+  intervals overlap heavily and the difference is noise. What it did buy is half the
+  uncertainty and a measured level of rater agreement.
+
+  **Four confirmed faults, and they are not all one class.** Three are the family
+  the first study found: the reph (`র্`) or a vowel sign landing on the wrong
+  consonant, or a character dropped — `LESSONS.md` §3 records that this is exactly
+  where guards go wrong. **The fourth is different and worth chasing separately: an
+  English word in quotation marks was put through the Bijoy tables instead of being
+  left alone.** That is a detection false positive, not a conversion fault, and it
+  turned up here only because the residue study looks at output that is not a
+  Bengali word. It belongs with the 0.014% English false-positive rate in D2, and it
+  suggests quoted Latin text is a case the detector handles less well than bare
+  Latin text.
 
   Reproduce the sample with:
 
@@ -167,11 +179,13 @@ Two honest caveats, both of which should stay attached to these numbers:
 
   So it is withdrawn rather than corrected, pending two things: measuring it
   again from scratch, and hand-classifying a sample of the words *not* found into
-  names, rare words and genuine errors. **That sampling was done on 13 August
-  2026** — 200 words, recorded seed, pre-registered scheme, second blind rater —
-  and it produced the 99.908% [99.737, 99.969] real-document estimate in section
-  8 and in README.md. This paragraph described it as the top open task, which it
-  was when written and has not been since.
+  names, rare words and genuine errors. **That sampling was done on 13 August 2026
+  and re-run on 19 August** — the re-run drew 400 words with seed `20260819` and used
+  three independent blind raters against the same pre-registered scheme. It produced
+  **99.939%** [99.846, 99.976], confirming the first run's 99.908% [99.737, 99.969]
+  rather than moving it. Both are recorded in README.md and the full write-up is in
+  `local/residue-study-2026-08-19.md`. This paragraph described the sampling as the
+  top open task, which it was when written and has not been since.
 
   The lesson generalises, and it is why the withdrawal is written out at length:
   a number copied from one report into a document outlives the report. Every
@@ -239,11 +253,17 @@ In rough order of value:
    window was inert in 0.4.0, was fixed and hand-verified on 13 August, and was
    then removed entirely on 15 August in favour of doing one thing well. Mukti is
    a command-line tool and a library.
-2. ~~Sample the residue.~~ **Done, 13 August 2026.** 200 words drawn with a
-   recorded seed, classified against a scheme written down first, and a second
-   rater with no knowledge of the project classified the same 200 blind. Three
-   genuine mis-conversions in each. Real-document accuracy **99.909%**
-   [99.737, 99.969], or 99.756% counting every unjudgeable case as an error.
+2. ~~Sample the residue.~~ **Done 13 August, re-run 19 August 2026.** The re-run
+   drew 400 words (seed `20260819`) from the 10,530-word residue and had three
+   independent blind raters classify every one: 4 mis-conversions, 384 correctly
+   converted words no dictionary lists, 8 non-words, 4 names, 0 abstentions.
+   Real-document accuracy **99.939%** [99.846, 99.976], floor 99.879%.
+
+   **Still open, and now specified:** the labelled corpus predates the 15 August
+   font-list widening, so neither run covers the 118 families added then. A study
+   that does needs the corpus re-labelled, which changes the tune/test split
+   (LESSONS §11) and so cannot be compared directly with either run. Worth doing as
+   its own measurement, not as a third data point in this series.
 3. **Bangla in the command's own messages.** The strings sit in the CLI's source
    rather than a table, so this is now a small refactor plus a translation, not
    just a translation. Lower value than it was: someone typing commands is
