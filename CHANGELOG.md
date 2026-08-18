@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`zip` upgraded from 2 to 8** — six major versions — in the code that opens
+  every `.docx`, `.xlsx` and `.pptx`. That is untrusted input, so this is the one
+  dependency where being current matters most.
+
+  The published 0.6.0 binary carried **two** archive parsers: ours on 2.4.2 and
+  `office_oxide`'s on 8.6.0. There is now one to audit instead of two, and the
+  dependency tree drops from 157 packages to 153.
+
+  **Verified against 3,088 real documents** (1,877 distinct), converted before and
+  after and compared on a hash of the whole output archive:
+
+  | | |
+  |---|---|
+  | Identical output | **1,874 of 1,877** |
+  | Differing | 3 |
+  | Word and font counts changed | **none** |
+  | Documents that stopped converting | **none** |
+
+  The three differ by 36 bytes each — two per archive entry, in the central
+  directory's external-attributes field, where the old version stamped octal
+  `100644` and the new one stamps `100000`. Every entry's content hash, CRC,
+  compressed size and compression method is identical, and the outputs still open
+  in an OOXML reader. Those three documents take the `raw_copy_file` path, so this
+  is how the library restamps a copied entry, not anything Mukti writes. Office
+  formats do not read Unix permission bits.
+
+  **The binary got 64 bytes smaller**, which is to say it did not change. A
+  duplicate parser was expected to cost more than that; the linker had already been
+  discarding the unused copy. The reason to do this is the audit surface, not the
+  size — stated because the opposite would have been the easier claim to make.
+
+  144 tests pass, clippy clean, formatting clean, `cargo deny` clean.
+
+
 ## 0.6.0 — 15 August 2026
 
 ### Corrected in the documents

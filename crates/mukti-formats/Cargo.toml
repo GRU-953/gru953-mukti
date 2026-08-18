@@ -17,7 +17,36 @@ gru953-mukti = { path = "../mukti-core", version = "0.6.0" }
 # crate parses .docx/.xlsx/.pptx XML that the user supplies. Do not go back.
 quick-xml = "0.41"
 
-zip = { version = "2", default-features = false, features = ["deflate"] }
+# zip 8, not 2, and the upgrade was measured rather than assumed.
+#
+# Bumped 19 August 2026, six major versions at once. This is the library that
+# opens every .docx, .xlsx and .pptx a user hands us, which is untrusted input, so
+# staying current here matters more than anywhere else in the tree.
+#
+# Two things made it safe to do. The API surface this project uses -- ZipArchive,
+# ZipWriter, start_file, raw_copy_file, by_name, by_index, file_names, finish -- is
+# unchanged across all six majors: the bump compiled with zero errors and zero
+# clippy warnings. And office_oxide already depended on zip 8, so the published
+# 0.6.0 binary carried TWO archive parsers; this leaves one to audit instead of two
+# and drops the package count from 157 to 153.
+#
+# What it was verified against: 3,088 real documents from the measurement archive,
+# 1,877 of them distinct, converted before and after and compared on a hash of the
+# output. 1,874 identical. The 3 that differed differ by 36 bytes each -- two bytes
+# per archive entry, in the central directory's external-attributes field, where
+# zip 2 stamped octal 100644 and zip 8 stamps 100000. Every entry's content hash,
+# CRC, compressed size and compression method is identical, the word and font
+# counts are identical, and the outputs still open in a real OOXML reader. Those
+# three take the raw_copy_file path, so the difference is in how the library
+# restamps a copied entry, not in anything this project writes.
+#
+# The binary got 64 bytes smaller, which is nothing. A duplicate parser was
+# expected to cost more; the linker had already been discarding the unused copy.
+# The reason to do this is the audit surface, not the size.
+#
+# How to re-run the check before the next bump: the harness is described in
+# Dev-Memory/github-snapshot/dependabot-pull-requests.md.
+zip = { version = "8", default-features = false, features = ["deflate"] }
 
 # lopdf 0.42 is the first release fixing RUSTSEC-2026-0187: `load_mem` recursed
 # without bound through nested PDF arrays, so a ~21 KB crafted file aborted the
