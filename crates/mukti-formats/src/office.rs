@@ -262,6 +262,20 @@ pub fn is_text_part(name: &str) -> bool {
     let xml = name.ends_with(".xml");
     name == "word/document.xml"
         || name == "xl/sharedStrings.xml"
+        // Excel may keep a cell's text INLINE in the worksheet instead of in
+        // sharedStrings, and both are ordinary valid OOXML. Until 19 August 2026 only
+        // sharedStrings was read, so a workbook written the other way was skipped
+        // entirely -- and reported "0 of 0 words converted", which is indistinguishable
+        // from a workbook that genuinely had no legacy Bangla. Found by converting a
+        // real archive: 2 of 140 spreadsheets in it store every string inline, one of
+        // them 911,834 cells. They survived only because they happened to be already
+        // Unicode.
+        //
+        // No new element handling was needed: an inline string is `<is><t>`, and
+        // `is_text_element` already matches a bare `t` for exactly this namespace. A
+        // worksheet's other content is `<v>` (values) and `<f>` (formulas), neither of
+        // which is a `t`, so cell values and formulas are not touched.
+        || (xml && name.starts_with("xl/worksheets/sheet"))
         || name == "word/comments.xml"
         || (xml && name.starts_with("ppt/slides/slide"))
         || (xml && name.starts_with("ppt/notesSlides/notesSlide"))
@@ -808,7 +822,28 @@ pub fn convert_office(
             let declared = entry.size();
             read_part_within_limits(&mut entry, &name, declared, &mut total_read)?
         };
-        let (rewritten, part_summary) = if is_text_part(&name) {
+        // A worksheet is only worth rewriting if it actually holds an inline string.
+        //
+        // Adding worksheets to `is_text_part` fixed a real defect -- a workbook that
+        // keeps its text inline was being skipped in full -- but it also made every
+        // large spreadsheet pay for it. Measured 19 August 2026 on three real
+        // workbooks of 10, 16 and 41 MB: conversion went from 0.92s, 1.71s and 3.78s
+        // to 1.69s, 3.31s and 6.78s, about +85%. Nearly all of that was wasted, because
+        // a worksheet whose strings live in `sharedStrings` has no `<t>` element at all
+        // and the whole parse and re-serialise found nothing.
+        //
+        // So the expensive work is gated behind a substring search of the raw bytes,
+        // which is the cheapest possible test and cannot produce a false negative: an
+        // inline string is written `t="inlineStr"` and the marker is a plain ASCII
+        // literal, so if it is absent there is nothing for the rewriter to find. A
+        // false POSITIVE merely costs the parse it would have done anyway.
+        let worksheet_without_inline_strings =
+            name.starts_with("xl/worksheets/sheet") && !xml.contains("inlineStr");
+        let (rewritten, part_summary) = if worksheet_without_inline_strings {
+            // Nothing to do. Fall through to the copy-through path below by reporting
+            // an unchanged part.
+            (xml.clone(), Summary::default())
+        } else if is_text_part(&name) {
             rewrite_part(&xml, unicode_font)?
         } else if is_metadata_font_part(&name) {
             // Font names recorded as element text, not as attributes.
@@ -1326,6 +1361,69 @@ mod rewrite_tests {
             seen,
             vec!["Hello", "\n"],
             "a self-closing text element changed what the reader saw"
+        );
+    }
+
+    /// A workbook may keep a cell's text INLINE rather than in `sharedStrings`.
+    ///
+    /// Both are valid OOXML and Excel writes either. Until 19 August 2026 only
+    /// `sharedStrings` was read, so an inline workbook was skipped in full and the
+    /// tool said "0 of 0 words converted" -- indistinguishable from a file with no
+    /// legacy Bangla, which is the worst way to fail. Found by converting a real
+    /// archive in which 2 of 140 spreadsheets were written this way.
+    ///
+    /// The test also carries a formula and two numbers, because the worksheet is now
+    /// rewritten and `<f>` and `<v>` must come through untouched.
+    #[test]
+    fn an_inline_string_is_converted_and_formulas_are_not() {
+        // No format! here: it would treat the \u{a9} escape's braces as a
+        // placeholder, and doubling them to escape that is a lex error instead.
+        let sheet = concat!(
+            "<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">",
+            "<sheetData><row r=\"1\">",
+            "<c r=\"A1\" t=\"inlineStr\"><is><t>Kg\u{a9}m~wP</t></is></c>",
+            "<c r=\"B1\"><f>SUM(C1:C2)</f><v>42</v></c>",
+            "<c r=\"C1\"><v>17.5</v></c>",
+            "</row></sheetData></worksheet>"
+        )
+        .to_string();
+        let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let opts = zip::write::SimpleFileOptions::default();
+        for (name, body) in [
+            ("[Content_Types].xml", "<Types/>".to_string()),
+            ("_rels/.rels", "<Relationships/>".to_string()),
+            ("xl/worksheets/sheet1.xml", sheet),
+        ] {
+            zip.start_file(name, opts).unwrap();
+            zip.write_all(body.as_bytes()).unwrap();
+        }
+        let bytes = zip.finish().unwrap().into_inner();
+
+        let (out, summary) = convert_office(&bytes, "Nirmala UI").expect("it should convert");
+        assert_eq!(
+            summary.words_converted, 1,
+            "the inline string was not converted; a workbook written this way is \
+             silently skipped and the user is told nothing"
+        );
+
+        let mut archive = zip::ZipArchive::new(Cursor::new(&out[..])).unwrap();
+        let mut xml = String::new();
+        archive
+            .by_name("xl/worksheets/sheet1.xml")
+            .unwrap()
+            .read_to_string(&mut xml)
+            .unwrap();
+        assert!(
+            xml.contains('\u{0995}'),
+            "the converted cell should hold Bengali, got {xml}"
+        );
+        assert!(
+            xml.contains("<f>SUM(C1:C2)</f>"),
+            "the formula was altered; only <t> elements may be rewritten"
+        );
+        assert!(
+            xml.contains("<v>42</v>") && xml.contains("<v>17.5</v>"),
+            "a cell value was altered; only <t> elements may be rewritten"
         );
     }
 

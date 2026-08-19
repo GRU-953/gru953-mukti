@@ -1,5 +1,110 @@
 # Changelog
 
+## 0.7.0 — 19 August 2026
+
+Six defects fixed, one of them serious enough to lose data silently, plus a larger
+English dictionary and an optimisation that pays for the biggest fix. Every change was
+measured against v0.6.1 over 400 real documents, and the accuracy harness was re-run
+after each one.
+
+### Fixed
+
+- **BLOCKER: an Excel workbook that stores its text inline was never converted, and
+  the tool said "0 of 0 words converted".** Excel may keep a cell's string in
+  `xl/sharedStrings.xml` or inline in the worksheet; both are valid, and only the
+  first was read. The failure was silent — "0 of 0" is indistinguishable from a file
+  with no legacy Bangla — so nobody would notice. Found by converting a real archive
+  in which 2 of 140 spreadsheets were written that way, one of them 911,834 cells.
+  Neither lost data, because both happened to be already Unicode. That was luck.
+
+- **An English word ending in a curly apostrophe was transliterated into Bengali.**
+  `Harm’` became `ঐধৎস্থ`. The English test was gated on the token being plain ASCII,
+  and a trailing `’`, `”` or `—` from a word processor defeats that, so neither the
+  English dictionary nor the short-word guard was ever consulted. 11 tokens in 7 of
+  1,059 documents, **three of them inside live spreadsheet formulas**, where a
+  transliterated identifier breaks the formula rather than merely looking wrong.
+
+  The obvious version of this fix was tried in August and rejected on measurement:
+  trimming both ends of any punctuation exposed short Bijoy cores and cost a full
+  point of detection recall. This one trims only a trailing run of six typographic
+  characters and requires at least four letters to remain — a floor added after the
+  first attempt was measured and *did* cost recall, turning `Mi“` (গরু) into English.
+
+- **The Greek letter μ was not mapped where the micro sign µ was.** They are visual
+  twins and the legacy font draws both as `ক্র`, so `বিক্রেতা` came out as `বিμেতা`.
+  105 words in the same run; 60 runs of text in the 400-document comparison now
+  convert that did not before.
+
+- **A zero-width joiner stranded a vowel sign in front of its consonant.** The walk
+  that moves a pre-kar after its consonant advances only over consonants, and a joiner
+  is not one, so the vowel stayed in visual order. 37 tokens across 16 documents.
+
+- **`mukti check` on a PDF hid both things that make a PDF different** — that layout
+  will be lost, and that some text cannot be read at all. `convert` reported both;
+  `check`, the command whose entire job is to say what would happen, reported neither.
+  Over 253 real PDFs it was silent about 1,196,732 unreadable pieces, including 22
+  files from which nothing at all would be recovered.
+
+- **The PDF failure path was the last one echoing a library's own error wording** at
+  the user — cross-reference tables and invalid file headers. It now says, in one
+  sentence, that the file is not a readable PDF.
+
+### Changed
+
+- **Already-Unicode Bengali is now composed to Unicode NFC.** A vowel sign stored in
+  two pieces (`ে`+`া`) becomes the single character Unicode defines it to be (`ো`).
+  This is the one exception to "already-correct Bangla is left untouched", and it is
+  confined to canonical equivalence, so it cannot change meaning — only findability,
+  which is the entire purpose of converting. 1,688 words in a 1,059-document run
+  arrived written that way; none of it was Mukti's doing. It is not counted as a
+  conversion. The wider repair passes remain deliberately unused: they *delete*
+  characters, which is a judgement about intent rather than a normalisation.
+
+- **Dictionary lookups now compose the two-part vowels too.** The dictionary is built
+  with the composed spelling but was queried with whatever the caller held, so an
+  ordinary word spelled the other way was reported not to exist — weakening detection,
+  since "is the converted word a real word?" is one of the signals used. The same
+  ambiguity in the nukta has already cost this codebase four defects.
+
+- **The English dictionary grows from 234,428 to 465,971 words.** Webster's Second
+  International lists headwords only: `owner` is present and `owners` is not, as are
+  `member`/`members` and `meeting`/`meetings`, so every English plural had no
+  dictionary protection at all. Regular plurals are now derived from the existing
+  public-domain list rather than importing a new one, which avoids adding a licence
+  obligation and keeps the derivation auditable — the rules are fifteen lines. Only
+  bases of four letters or more are pluralised, again because a measurement showed
+  three-letter bases cost recall.
+
+  Measured effect: English false positives **0.014% → 0.013%**, precision
+  99.953% → 99.956%, and detection recall unchanged at **99.962%**.
+
+### Performance
+
+- **Adding worksheets to the rewritten parts cost about 85% on large spreadsheets**,
+  and nearly all of it was waste: a worksheet whose strings live in `sharedStrings`
+  has no text elements at all. The expensive parse is now gated behind a substring
+  search of the raw bytes, which cannot produce a false negative. Measured on three
+  real workbooks of 10, 16 and 41 MB:
+
+  | Workbook | v0.6.1 | with the fix | with the gate |
+  |---|---|---|---|
+  | 10.1 MB | 0.92s | 1.69s | **1.00s** |
+  | 16.2 MB | 1.71s | 3.31s | **1.90s** |
+  | 41.4 MB | 3.78s | 6.78s | **4.25s** |
+
+### Verified
+
+150 tests (six new regression tests), clippy clean, formatting clean, `cargo deny`
+clean with zero ignored advisories and zero licence exceptions.
+
+Against v0.6.1 over 400 real documents drawn with a recorded seed: **12 of 400 files
+differ, 60 runs of text now convert that did not, and every one of the six remaining
+places where Bengali disappeared is an English word correctly restored.** No
+regression survived. Two did not survive the first attempt and were found by this
+comparison rather than by the harness — the accuracy figures did not move when recall
+was genuinely being lost, which is worth knowing about the harness.
+
+
 ## 0.6.1 — 19 August 2026
 
 A maintenance release. Nothing a user does changes; both items are about what the

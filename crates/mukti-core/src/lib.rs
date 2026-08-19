@@ -354,6 +354,37 @@ fn rearrange(input: &str) -> String {
             s = t;
         }
 
+        // A zero-width joiner sitting between a pre-kar and its consonant used to
+        // block the move below, because the cluster walk advances only over
+        // consonants and a joiner is not one. The vowel sign then landed between the
+        // joiner and the consonant and stayed in visual order, so a word came out as
+        // `পায়‌ের` where it should read `পায়রে`. Measured 19 August 2026: 37 output
+        // tokens across 16 real documents, from source a word processor had seeded
+        // with joiners.
+        //
+        // Rather than thread a skip count through the reordering below -- which also
+        // joins two-part vowels and tracks its own tail offset -- the joiners are
+        // hoisted in front of the pre-kar here, so the existing logic then runs
+        // unchanged and correctly. A joiner before a consonant is a no-op, so nothing
+        // is lost by moving it.
+        if i + 1 < s.len() && is_pre_kar(s[i]) && matches!(at(&s, i + 1), '\u{200C}' | '\u{200D}') {
+            let mut k = i + 1;
+            while k < s.len() && matches!(s[k], '\u{200C}' | '\u{200D}') {
+                k += 1;
+            }
+            // Only worth doing if a consonant actually follows: otherwise there is no
+            // cluster to move across and the text is left exactly as it was.
+            if k < s.len() && is_consonant(s[k]) {
+                let joiners = k - i - 1;
+                let mut t: Vec<char> = s[..i].to_vec();
+                t.extend_from_slice(&s[i + 1..k]);
+                t.push(s[i]);
+                t.extend_from_slice(&s[k..]);
+                s = t;
+                i += joiners;
+            }
+        }
+
         // The important one: a pre-kar drawn before its consonant moves after
         // the whole cluster. `ি` + `ক` becomes `কি`.
         if i + 1 < s.len() && is_pre_kar(s[i]) && !at(&s, i + 1).is_whitespace() {
@@ -407,6 +438,50 @@ fn rearrange(input: &str) -> String {
     }
 
     s.into_iter().collect()
+}
+
+/// Compose Bengali's two composite vowel signs. Unicode NFC, and nothing else.
+///
+/// `ে` + `া` is the same character as `ো`, and `ে` + `ৗ` the same as `ৌ`. Unicode
+/// calls these canonically equivalent: they render identically and mean the same
+/// thing, but they do not compare equal, so text in the decomposed spelling fails a
+/// search for the composed one in Word, in a browser and in most databases. A
+/// 1,059-document run on 19 August 2026 found 1,688 words written the decomposed way
+/// -- none of them Mukti's doing; they arrived that way.
+///
+/// **Deliberately narrower than [`compose_two_part_vowels`], despite the similar
+/// name.** That one also collapses impossible doubles, and collapsing DELETES a
+/// character, which is a judgement about what the author meant. This only ever
+/// substitutes one spelling of the same character for another, so it cannot change
+/// meaning. That is what makes it safe to run over text Mukti has promised not to
+/// alter, and the wider repair not safe.
+pub fn compose_canonical_vowels(text: &str) -> String {
+    if !text.contains('\u{09C7}') {
+        // The overwhelmingly common case, and worth checking: every dictionary
+        // lookup and every already-Unicode word passes through here.
+        return text.to_owned();
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{09C7}' {
+            match chars.peek() {
+                Some('\u{09BE}') => {
+                    chars.next();
+                    out.push('\u{09CB}');
+                    continue;
+                }
+                Some('\u{09D7}') => {
+                    chars.next();
+                    out.push('\u{09CC}');
+                    continue;
+                }
+                _ => {}
+            }
+        }
+        out.push(c);
+    }
+    out
 }
 
 /// Decide whether a piece of text is legacy-encoded Bangla.
@@ -599,6 +674,19 @@ pub fn convert(input: &str) -> String {
 /// Repair Bengali that is already Unicode but was badly converted by something
 /// else — no glyph mapping, only the fixes that are safe on any Bengali text.
 ///
+/// **NOT IN THE SHIPPED PATH, and that is a decision rather than an oversight.**
+/// Nothing in `mukti-cli` or `mukti-formats` calls this. On 19 August 2026 the
+/// owner chose to repair already-Unicode text only where the repair is
+/// meaning-preserving, which is Unicode canonical composition and no more — that
+/// lives in [`compose_canonical_vowels`] and runs on every non-legacy word. The
+/// other passes reached from here COLLAPSE repeated marks and DROP a mistyped
+/// vowel, and dropping a character is a judgement about what an author meant, not
+/// a normalisation. Running it over text the tool has promised not to alter would
+/// break that promise in substance rather than in spelling.
+///
+/// Kept, not deleted, because the passes are tested, careful and useful if that
+/// decision is ever revisited — most likely behind an explicit opt-in flag.
+///
 /// Each step undoes something structurally impossible in the language, so it
 /// cannot damage correct text: a two-part vowel left in halves, a repeated mark,
 /// or two vowel signs on one syllable. Text with no Bengali in it is returned
@@ -680,6 +768,13 @@ fn reunite_split_vowels(s: &str) -> String {
     out
 }
 
+/// **Misleading name, kept for now: this does far more than compose.**
+///
+/// It composes the two-part vowels and then runs three repair passes, two of which
+/// DELETE characters. It is therefore not meaning-preserving and must not be used
+/// where only Unicode normalisation is wanted -- use [`compose_canonical_vowels`] for
+/// that. Nothing in the shipped path calls this; it is reached only through
+/// [`repair_unicode`], which is itself unused.
 fn compose_two_part_vowels(s: &str) -> String {
     let s = s
         .replace("\u{09C7}\u{09BE}", "\u{09CB}") // ে + া -> ো
@@ -818,6 +913,14 @@ const MIN_CHARS_TO_JUDGE: usize = 12;
 /// corrupt readable English. They are therefore only converted when the
 /// document has *already proved* it contains legacy text elsewhere, and the
 /// line itself carries at least one byte from the range Bijoy uses.
+///
+/// **NOT IN THE SHIPPED PATH.** Nothing in `mukti-cli` or `mukti-formats` calls
+/// this; both go through [`classify::convert_pieces`], which decides word by word.
+/// Recorded here because the absence has misled twice: a defect was once reported
+/// against this function as though it were live, and the reph-remnant analysis of
+/// 19 August 2026 initially blamed a repair path that never runs. The short-line
+/// rule below is also weaker than the word-level path — it bypasses the English
+/// dictionary entirely — so wiring it in would be a regression, not a fix.
 pub fn convert_document(input: &str) -> DocumentConversion {
     if input.is_empty() {
         return DocumentConversion {
@@ -996,7 +1099,7 @@ fn evidence_is_only_word_processor_typography(input: &str) -> bool {
 }
 
 /// The curated function-word list decides this, and deliberately *not* the
-/// shipped 234,428-word English dictionary. Widening it to real English words
+/// shipped 465,971-word English dictionary. Widening it to real English words
 /// was tried, to protect short phrases like `Category “A”` that carry only one
 /// function word between them. It backfired: a list that large matches Bijoy
 /// fragments too, and five long, unmistakably legacy lines in the archive were
@@ -1510,6 +1613,57 @@ mod tests {
     #[test]
     fn empty_input_is_safe() {
         assert_eq!(convert(""), "");
+    }
+
+    /// A zero-width joiner must not strand a pre-kar in front of its consonant.
+    ///
+    /// Word processors seed text with U+200C, and the cluster walk that moves a
+    /// pre-kar after its consonant advances only over consonants -- so a joiner
+    /// stopped it dead and the vowel sign stayed in visual order. Measured 19 August
+    /// 2026: 37 output tokens across 16 real documents. The same source without the
+    /// joiner was always correct, which is what makes this a clean comparison.
+    #[test]
+    fn a_zero_width_joiner_does_not_strand_a_pre_kar() {
+        // `cvq‡i` and `cvq‡<ZWNJ>i` differ only by the joiner, so they must agree
+        // once the joiner is discounted.
+        let without = convert("cvq\u{2021}i");
+        let with = convert("cvq\u{2021}\u{200C}i");
+        let stripped: String = with.chars().filter(|c| *c != '\u{200C}').collect();
+        assert_eq!(
+            stripped, without,
+            "the joiner changed the letter order: {with:?} against {without:?}"
+        );
+        // And be explicit about the shape: the vowel sign belongs after the consonant.
+        assert!(
+            with.ends_with("রে"),
+            "the pre-kar is still stranded before its consonant: {with:?}"
+        );
+    }
+
+    /// The two mu characters are visual twins and SutonnyMJ draws both as ক্র.
+    ///
+    /// Only U+00B5 (micro sign) was mapped, so a document carrying U+03BC (Greek
+    /// small letter mu) kept a raw mu in its output -- বিক্রেতা came out as বিμেতা.
+    /// 105 words in a 1,059-document run on 19 August 2026. Which of the two a file
+    /// holds depends on the keyboard driver and on what the word processor
+    /// substituted, so neither may be assumed. Note this cannot happen in a Bijoy
+    /// `.txt`, which is Windows-1252 and has no room for U+03BC; it happens in Office
+    /// documents, where the text is Unicode.
+    #[test]
+    fn both_mu_characters_convert_and_neither_survives_raw() {
+        let micro = convert("we\u{b5}\u{2021}Zv");
+        let greek = convert("we\u{3bc}\u{2021}Zv");
+        assert_eq!(
+            micro, greek,
+            "the micro sign and the Greek mu must convert alike; they are the same \
+             glyph in the legacy font"
+        );
+        for (name, out) in [("micro sign", &micro), ("Greek mu", &greek)] {
+            assert!(
+                !out.chars().any(|c| c == '\u{b5}' || c == '\u{3bc}'),
+                "{name} survived unconverted into the output: {out:?}"
+            );
+        }
     }
 
     #[test]

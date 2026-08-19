@@ -149,6 +149,15 @@ pub static CONVERSION_MAP: &[(&str, &str)] = &[
     ("³", "ক্ত"),
     ("´", "ক্ম"),
     ("µ", "ক্র"),
+    // U+03BC GREEK SMALL LETTER MU, the visual twin of U+00B5 above.
+    //
+    // Both render as a mu and SutonnyMJ draws the glyph as ক্র, but only the micro
+    // sign was mapped, so a document that happened to carry the Greek letter kept a
+    // raw μ in its converted output -- বিক্রেতা came out as বিμেতা. Measured on
+    // 19 August 2026 over 1,059 real documents: 105 words affected. Which of the two
+    // a file contains depends on the keyboard driver and on what the word processor
+    // substituted, so neither can be assumed.
+    ("μ", "ক্র"),
     ("¶è", "ক্ষ্ণ"),
     ("¶", "ক্ষ"),
     ("·", "ক্স"),

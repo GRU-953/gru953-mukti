@@ -135,6 +135,16 @@ Re-measured from scratch on 13 August 2026, on a freshly rebuilt answer key of
 | Detection, Unicode Bangla wrongly converted | **0.000%** | 436,952 words |
 | Misspellings preserved, not "corrected" | 99.979% | 14,214 words |
 
+**One deliberate exception to "already-correct Bangla is untouched", from 0.7.0.**
+Already-Unicode Bengali passes through byte-for-byte, with a single change: a vowel
+sign stored in two pieces is composed into the one character Unicode defines it to be
+(`ে`+`া` → `ো`, `ে`+`ৗ` → `ৌ`). This is Unicode canonical composition, so it cannot
+alter meaning — but it does alter *findability*, which is the point: a search for `ো`
+does not match the two-piece spelling in Word, in a browser or in a database. A
+1,059-document run found **1,688 words** written that way, none of them Mukti's doing.
+Nothing else about a non-legacy word is changed, and a composition is not counted as
+a conversion in the figures a user is shown.
+
 The detection figures come from a **held-out** half of the data, never looked at
 while anything was tuned.
 
@@ -282,7 +292,7 @@ wrong — still well-formed Bangla, just not the word that was written.
 
 **No machine learning.** A deterministic table lookup, hand-written reordering
 rules, and two dictionaries built into the binary: 451,348 Bangla words and
-234,428 English ones. Same input, same output, on any machine, offline.
+465,971 English ones. Same input, same output, on any machine, offline.
 
 ## Build it yourself
 

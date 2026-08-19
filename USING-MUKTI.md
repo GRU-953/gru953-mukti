@@ -167,7 +167,15 @@ Measured, not estimated:
 - **99.989%** of words convert correctly (from 473,244 words tested).
 - **99.962%** of legacy Bangla words are found and converted (from 177,079).
 - **0.014%** of English words are wrongly converted — about 14 in 100,000.
-- **0.000%** of Bangla that was already correct is touched.
+- **0.000%** of Bangla that was already correct is converted.
+
+**One small exception, added in 0.7.0.** Bangla that is already Unicode is passed
+through untouched, with a single change: where a vowel sign is stored in two pieces,
+the two are joined into the one character Unicode says they are. `ে` plus `া` becomes
+`ো`. It looks identical either way — but a computer does not think they are the same,
+so a search for `ো` will not find the two-piece spelling. Joining them makes those
+words findable, and it cannot change what the text says, because the two spellings are
+defined as the same character.
 
 The full method, including what these figures *cannot* tell you, is in the
 [README](./README.md).

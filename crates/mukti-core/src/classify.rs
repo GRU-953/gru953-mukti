@@ -138,7 +138,7 @@ struct Features {
 
 /// Modern office vocabulary that a 1934 dictionary cannot contain.
 ///
-/// The bulk of the English guard is [`Dictionary::english`], 234,428 words
+/// The bulk of the English guard is [`Dictionary::english`], 465,971 words
 /// from Webster's Second International. Its blind spot is everything coined
 /// since: email, website, dataset, spreadsheet. These documents are written
 /// in precisely that register, so the gap matters and this list closes it.
@@ -201,7 +201,7 @@ impl Features {
             )
         };
 
-        // Two lists, union. The 234,428-word Webster list carries the bulk;
+        // Two lists, union. The 465,971-word Webster list carries the bulk;
         // the short guard adds the modern office vocabulary a 1934 dictionary
         // could not have — email, website, dataset — which is exactly the
         // register these documents are written in.
@@ -221,8 +221,59 @@ impl Features {
         // measurable gain. Words like `(Owners’` remain a known residue inside
         // the measured 0.014%; see R16l. Do not change this without re-running
         // `eval` and reading both numbers.
-        let is_english = word.is_ascii()
-            && (ENGLISH_GUARD.contains(&bare) || Dictionary::english().contains_english(word));
+        // The `is_ascii` test is relaxed for a TRAILING run of word-processor
+        // typography, and for nothing else.
+        //
+        // This is a much narrower change than the one rejected above, and the
+        // difference is the whole point. That one made the entire gate use `bare`,
+        // which trims **both** ends of **any** non-alphabetic character, exposing
+        // short Bijoy cores everywhere. This only stops six specific characters --
+        // the curled quotes and the en/em dashes Word substitutes -- from defeating
+        // the ASCII test when they sit at the END of a token. `Harm’` was converting
+        // to `ঐধৎস্থ` purely because Word had curled the apostrophe: 11 such tokens in
+        // 7 of 1,059 real documents on 19 August 2026, three of them inside live
+        // spreadsheet formulas, where a transliterated identifier breaks the formula
+        // rather than merely looking wrong.
+        //
+        // The residual risk is real and bounded: genuine Bijoy that happens to end in
+        // one of these six characters, and whose trimmed core happens to be an
+        // English word, would now be protected and so missed. That is why this ships
+        // only with `eval` re-run and both recall and the false-positive rate read.
+        let without_typography = word.trim_end_matches(|c: char| {
+            matches!(
+                c,
+                '\u{2018}' | '\u{2019}' | '\u{201C}' | '\u{201D}' | '\u{2013}' | '\u{2014}'
+            )
+        });
+        // Note what this does NOT do. `contains_english` already trims both ends of
+        // whatever it is given, so the both-ends trimming the rejected fix was blamed
+        // for is *already* how an ASCII word is looked up today. The only thing that
+        // changes here is that a trailing curl no longer stops the lookup happening
+        // at all -- `contains_english` bails out on its own `is_ascii` check before it
+        // ever reaches the dictionary.
+        // A FOUR-character floor on the typography path, and it is not arbitrary.
+        //
+        // Without it the relaxation costs recall in exactly the way the wider fix did.
+        // Compared against v0.6.1 over 400 real documents: `Mi“` -- genuine Bijoy for
+        // গরু -- trimmed to `Mi`, whose lower-cased core `mi` is a Webster's headword,
+        // so the word was protected as English and stopped converting. Short cores are
+        // where Bijoy collides with English; the words this fix exists for are not
+        // short (`Harm`, `Owners`, `judgment`). Four characters keeps every one of
+        // those and excludes the collisions found.
+        let typography_core_is_long_enough = without_typography.len() != word.len()
+            && without_typography
+                .chars()
+                .filter(|c| c.is_ascii_alphabetic())
+                .count()
+                >= 4;
+        let is_english = if without_typography.len() == word.len() {
+            // No typography was trimmed: the original behaviour, unchanged.
+            word.is_ascii()
+                && (ENGLISH_GUARD.contains(&bare) || Dictionary::english().contains_english(word))
+        } else {
+            typography_core_is_long_enough
+                && Dictionary::english().contains_english(without_typography)
+        };
 
         Features {
             alphanumeric: word.chars().filter(|c| c.is_alphanumeric()).count(),
@@ -387,7 +438,22 @@ pub fn convert_pieces(input: &str) -> Vec<Piece> {
                     text: if changed {
                         convert(segment.text)
                     } else {
-                        segment.text.to_owned()
+                        // A word that is NOT legacy is returned as it came, with one
+                        // exception: Bengali's two-part vowel signs are composed.
+                        //
+                        // This is Unicode NFC and nothing else -- `ে`+`া` becomes `ো`,
+                        // which is the same character by definition, so the meaning
+                        // cannot change and neither can what a reader sees. What does
+                        // change is that the word becomes findable: a search for `ো`
+                        // does not match `ে`+`া` in Word, a browser or a database, and
+                        // being searchable is the whole point of converting at all.
+                        // A 1,059-document run on 19 August 2026 found 1,688 words
+                        // written the decomposed way, none of them Mukti's doing.
+                        //
+                        // It is NOT counted as a conversion, because it is not one --
+                        // no legacy text was involved. The count a user is shown stays
+                        // the count of legacy words converted.
+                        crate::compose_canonical_vowels(segment.text)
                     },
                     changed,
                     word: true,
@@ -552,5 +618,96 @@ mod tests {
         assert!(out.contains("2026"), "a number was altered: {out:?}");
         assert!(out.contains("এবং"), "Unicode Bengali was altered: {out:?}");
         assert!(out.contains("done"), "English was altered: {out:?}");
+    }
+
+    /// Word's curled apostrophe must not strip an English word of its protection.
+    ///
+    /// `Harm’` was converting to `ঐধৎস্থ` for one reason only: the curl makes the
+    /// token non-ASCII, the ASCII gate then refused to consult the English
+    /// dictionary, and the forced conversion looked plausible enough to accept.
+    /// Measured on 19 August 2026 over 1,059 real documents: 11 such tokens in 7
+    /// files, three of them inside live spreadsheet formulas.
+    ///
+    /// The fix relaxes the ASCII test for a trailing run of six typographic
+    /// characters and nothing else. `eval` was re-run against it and every figure
+    /// held -- detection recall stayed at 99.962% and the English false-positive rate
+    /// at 0.014% -- which is what the earlier, wider version of this fix could not
+    /// manage: it cost a full point of recall.
+    #[test]
+    fn english_keeps_its_protection_through_word_processor_typography() {
+        // Each of these ends in punctuation Word substitutes automatically.
+        //
+        // `Owners’` -- the example the source comment above has named since 14 August
+        // -- is deliberately NOT here, and the reason is a separate defect. The
+        // embedded English list is Webster's 1934 headwords, which are singular only:
+        // `owner` is present and `owners` is not, as are `member`/`members` and
+        // `meeting`/`meetings`. So English plurals get no dictionary protection at
+        // all, whatever their punctuation. That is a dictionary gap, not a gate gap,
+        // and fixing it here would mean guessing at morphology instead.
+        for word in [
+            "Harm\u{2019}", // right single quote
+            "Decide\u{2019}",
+            "position\u{2014}", // em dash
+            "report\u{201D}",   // right double quote
+            "budget\u{2013}",   // en dash
+        ] {
+            // Concatenation, not format!: a \u{..} escape inside a format string
+            // cannot be brace-escaped, because Rust lexes the escape first.
+            let line = word.to_string() + " Kg\u{a9}m~wP";
+            let out = convert_words(&line);
+            assert!(
+                out.starts_with(word),
+                "an English word lost its protection to trailing typography: \
+                 {word:?} became {out:?}"
+            );
+            assert!(
+                out.contains("কর্মসূচি"),
+                "the legacy word beside it should still convert: {out:?}"
+            );
+        }
+    }
+
+    /// Already-Unicode Bengali is composed to NFC, and otherwise left alone.
+    ///
+    /// This is the one exception to "text that is not legacy comes back exactly as it
+    /// went in", added 19 August 2026 and deliberately confined to Unicode canonical
+    /// equivalence: `ে`+`া` becomes `ো`, the same character by definition. 1,688 words
+    /// in a 1,059-document run arrived written the decomposed way -- not Mukti's doing
+    /// -- and were invisible to a search for the composed spelling.
+    #[test]
+    fn already_unicode_bengali_is_normalised_but_not_otherwise_altered() {
+        // মোট and লোক, spelled the decomposed way.
+        let decomposed = "\u{09AE}\u{09C7}\u{09BE}\u{099F} \u{09B2}\u{09C7}\u{09BE}\u{0995}";
+        let out = convert_words(decomposed);
+        assert_eq!(
+            out, "মোট লোক",
+            "the decomposed spelling was not composed: {out:?}"
+        );
+        assert!(
+            !out.contains("\u{09C7}\u{09BE}"),
+            "a decomposed vowel survived: {out:?}"
+        );
+
+        // Nothing else about a non-legacy word may change.
+        for untouched in [
+            "Report 2026",
+            "এবং সদস্য", // already-composed Bengali
+            "email@example.com",
+            "কর্মসূচি",
+        ] {
+            assert_eq!(
+                convert_words(untouched),
+                untouched,
+                "text with nothing to normalise was altered"
+            );
+        }
+
+        // And a normalisation is NOT reported as a conversion.
+        let pieces = convert_pieces(decomposed);
+        let (converted, _) = count(&pieces);
+        assert_eq!(
+            converted, 0,
+            "composing a vowel is not a legacy conversion and must not be counted as one"
+        );
     }
 }

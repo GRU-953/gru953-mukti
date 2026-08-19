@@ -33,7 +33,7 @@ use crate::roundtrip::normalise_nukta;
 /// The compiled word list, built into the binary.
 static SHIPPED_BYTES: &[u8] = include_bytes!("../data/bengali-words.fst");
 
-/// 234,428 English words, for the opposite job: proving a word is **not**
+/// 465,971 English words, for the opposite job: proving a word is **not**
 /// Bijoy so it is left alone.
 ///
 /// Compiled from `/usr/share/dict/words` — Webster's Second International,
@@ -93,8 +93,20 @@ impl Dictionary {
     /// the precomposed spelling, so a caller holding the decomposed one would
     /// otherwise be told a perfectly ordinary word does not exist. That
     /// ambiguity has already cost this codebase four separate defects.
+    ///
+    /// **The two-part vowels are composed for exactly the same reason, and were
+    /// missed until 19 August 2026.** `ো` is one character (U+09CB) and also, equally
+    /// legally, `ে` followed by `া` (U+09C7 U+09BE); `ৌ` likewise. `lexicon-build`
+    /// already composes them when the dictionary is built -- its own comment says the
+    /// source list spells 3,700 words the decomposed way -- but the LOOKUP did not, so
+    /// a caller holding the decomposed spelling was told the word did not exist. Real
+    /// documents hold that spelling: a 1,059-document run on 19 August found 1,688
+    /// words written the decomposed way. Every one was failing this lookup, which
+    /// weakens detection, because "is the converted word a real word?" is one of the
+    /// signals that decides whether a word is legacy at all.
     pub fn contains(&self, word: &str) -> bool {
-        self.set.contains(normalise_nukta(word))
+        self.set
+            .contains(crate::compose_canonical_vowels(&normalise_nukta(word)))
     }
 
     /// How many words this dictionary holds.
@@ -165,5 +177,47 @@ mod tests {
             d.contains(decomposed),
             "the decomposed spelling was rejected"
         );
+    }
+}
+
+#[cfg(test)]
+mod two_part_vowel_tests {
+    use super::*;
+
+    /// A word spelled with the decomposed vowel must be found, like the nukta.
+    ///
+    /// `ো` is one character (U+09CB) and also `ে` + `া` (U+09C7 U+09BE). The
+    /// dictionary is BUILT with the composed spelling -- `lexicon-build` composes
+    /// 3,700 such words in its source list -- but until 19 August 2026 the lookup did
+    /// not compose, so a caller holding the decomposed spelling was told an ordinary
+    /// word did not exist. Real documents hold that spelling: 1,688 words in a
+    /// 1,059-document run. Since "is the converted word a real word?" is one of the
+    /// signals that decides whether text is legacy, the effect was to weaken
+    /// detection on exactly the documents that had been damaged before Mukti saw them.
+    #[test]
+    fn a_decomposed_vowel_finds_the_same_word_as_the_composed_one() {
+        let d = Dictionary::shipped();
+        for (composed, decomposed) in [
+            (
+                "\u{09AE}\u{09CB}\u{099F}",
+                "\u{09AE}\u{09C7}\u{09BE}\u{099F}",
+            ), // মোট
+            (
+                "\u{09B2}\u{09CB}\u{0995}",
+                "\u{09B2}\u{09C7}\u{09BE}\u{0995}",
+            ), // লোক
+        ] {
+            assert!(
+                d.contains(composed),
+                "the composed spelling should be in the dictionary: {composed:?}"
+            );
+            assert!(
+                d.contains(decomposed),
+                "the decomposed spelling of the same word was not found: \
+                 {decomposed:?}. These are canonically equivalent and render \
+                 identically; a dictionary that answers differently for the two is \
+                 wrong for whichever one the caller happens to hold."
+            );
+        }
     }
 }

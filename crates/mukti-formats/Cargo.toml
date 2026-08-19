@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-gru953-mukti = { path = "../mukti-core", version = "0.6.0" }
+gru953-mukti = { path = "../mukti-core", version = "0.7.0" }
 
 # quick-xml 0.41 is the first release fixing RUSTSEC-2026-0194 (quadratic time
 # checking a start tag for duplicate attribute names) and RUSTSEC-2026-0195
