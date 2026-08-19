@@ -1,5 +1,70 @@
 # Changelog
 
+## 0.7.1 — 19 August 2026
+
+**One fix: the Unicode normalisation 0.7.0 announced did not work on Word, Excel or
+PowerPoint.** It worked only on plain text files. Found by testing the published 0.7.0
+binary against 1,059 real documents — the release notes claimed something that was not
+true of the format most people use.
+
+### Fixed
+
+- **The two-part vowel composition now reaches Office documents.** Measured across the
+  806 converted Office files in that run: **9,904 decomposed vowel pairs survived**
+  inside real text elements, against 404,972 composed. Two independent causes, both
+  invisible to the tests that existed:
+
+  1. `mukti-formats/src/office.rs` does not call `classify::convert_pieces` — it
+     **duplicates** that loop, calling `classify_words` and `convert` directly, so the
+     normalisation added to `convert_pieces` in 0.7.0 never ran for an Office document.
+     This project's own audit had already flagged the duplicated loop as a drift risk.
+     This is what the drift cost.
+
+  2. Even once that was fixed it still did nothing, for a second reason: a rewritten
+     part is kept only if the rewrite *did* something, and that test counted converted
+     words and renamed fonts. A document needing nothing but composition had its
+     rewrite computed and then thrown away with the part. `Summary` gains
+     `words_normalised`, which is counted where the composition happens and joins that
+     test. The existing comment there is right that comparing strings would be the
+     wrong test — re-serialising XML changes bytes without changing text — so this is
+     a counter, not a comparison.
+
+  The regression test uses a document containing **no legacy text at all**, which is
+  what makes it catch the second cause. A test with legacy text in it passes on the
+  first fix alone and hides the discard.
+
+### Known, and deliberately not fixed
+
+A further **141** decomposed pairs in that run sit inside `<v>` elements — Excel's
+cache of a formula's last computed value. Those are never rewritten, because `<v>`
+normally holds numbers and editing it would corrupt data. The cache is regenerated from
+the formula, so the practical consequence is only this: **a cell whose text arrives via
+a formula keeps its old spelling on screen until Excel recalculates.**
+
+### From the same test run, for the record
+
+The published 0.7.0 was otherwise sound on all 1,059 files: every one converted, all
+exiting 0; **zero** English words of four letters or more wrongly converted across
+7,680,430 aligned tokens; and all four of the garbage strings 0.6.1 produced (`ঐধৎস্থ`,
+`উবপরফব্থ`, `লঁফমসবহঃ)্থ্থ`, `ঙহিবৎং্থ`) absent from all 806 converted documents, where
+0.6.1 produced 11 of them.
+
+Round-trip accuracy on that run: **99.9763%** of words and **99.9934%** of characters,
+over 2,640,521 words the encoder can represent.
+
+**The measuring harness had to be rebuilt before any of that could be trusted**, and it
+still got one answer wrong: it first reported 2,006 English words converted, whose pairs
+turned out to be unrelated tokens sitting at the same offset inside a replace block of
+unequal length. Restricted to one-for-one replacements the count is zero. Recorded
+because a harness that is wrong in the flattering direction is the more dangerous kind.
+
+### Verified
+
+151 tests (one new), clippy clean, formatting clean, `cargo deny` clean with zero
+ignored advisories and zero licence exceptions. Every figure in the accuracy harness
+unchanged from 0.7.0.
+
+
 ## 0.7.0 — 19 August 2026
 
 Six defects fixed, one of them serious enough to lose data silently, plus a larger

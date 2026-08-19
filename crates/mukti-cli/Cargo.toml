@@ -13,8 +13,8 @@ name = "mukti"
 path = "src/main.rs"
 
 [dependencies]
-gru953-mukti = { path = "../mukti-core", version = "0.7.0" }
-mukti-formats = { path = "../mukti-formats", version = "0.7.0" }
+gru953-mukti = { path = "../mukti-core", version = "0.7.1" }
+mukti-formats = { path = "../mukti-formats", version = "0.7.1" }
 
 [lints]
 workspace = true
