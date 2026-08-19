@@ -619,6 +619,16 @@ pub struct Summary {
     pub words_untouched: usize,
     /// Runs whose font was changed from a legacy one to a Unicode one.
     pub fonts_changed: usize,
+    /// Words that were already Unicode and had a two-part vowel composed.
+    ///
+    /// Counted separately from `words_converted` because it is not a conversion --
+    /// no legacy text was involved -- but it MUST be counted, because the decision
+    /// below about whether a part needs rewriting is made from these numbers rather
+    /// than by comparing strings. Without a counter the normalisation was computed
+    /// and then silently thrown away for every Office document: measured on the
+    /// v0.7.0 release, 9,904 decomposed vowel pairs survived in real text elements
+    /// for exactly this reason.
+    pub words_normalised: usize,
 }
 
 /// Legacy Bangla font names, lower-cased.
@@ -855,6 +865,7 @@ pub fn convert_office(
         summary.words_converted += part_summary.words_converted;
         summary.words_untouched += part_summary.words_untouched;
         summary.fonts_changed += part_summary.fonts_changed;
+        summary.words_normalised += part_summary.words_normalised;
 
         // Keep the rewrite ONLY if this part actually needed one.
         //
@@ -875,7 +886,13 @@ pub fn convert_office(
         // left it. Every re-serialisation is an opportunity to differ from the
         // original in a way nobody has thought to check, and the cheapest way to
         // take that risk to zero is not to do it.
-        if part_summary.words_converted > 0 || part_summary.fonts_changed > 0 {
+        // `words_normalised` joins the test for the same reason the other two are in
+        // it: it is something the rewrite DID. It was missing at v0.7.0, so every
+        // composition was computed and then discarded with the part.
+        if part_summary.words_converted > 0
+            || part_summary.fonts_changed > 0
+            || part_summary.words_normalised > 0
+        {
             replacements.insert(name, rewritten);
         }
     }
@@ -953,7 +970,23 @@ fn rewrite_part(
                     convert(segment.text)
                 } else {
                     summary.words_untouched += 1;
-                    segment.text.to_owned()
+                    // Compose the two-part vowels, exactly as `classify::convert_pieces`
+                    // does for plain text.
+                    //
+                    // **This loop duplicates that function, and the duplication cost real
+                    // accuracy.** The normalisation was added to `convert_pieces` on
+                    // 19 August 2026 and had no effect at all on Word, Excel or
+                    // PowerPoint, because this path calls `classify_words` and `convert`
+                    // directly and never goes through it. Measured on the v0.7.0 release
+                    // over 1,059 real documents: 9,904 decomposed vowel pairs survived
+                    // inside real text elements, every one of them in an Office file. The
+                    // project's own audit has flagged this duplicated loop before; this is
+                    // what it costs.
+                    let composed = gru953_mukti::compose_canonical_vowels(segment.text);
+                    if composed != segment.text {
+                        summary.words_normalised += 1;
+                    }
+                    composed
                 };
                 pieces.push(Placed {
                     start: at,
@@ -1361,6 +1394,63 @@ mod rewrite_tests {
             seen,
             vec!["Hello", "\n"],
             "a self-closing text element changed what the reader saw"
+        );
+    }
+
+    /// Normalisation must reach Office documents, not only plain text.
+    ///
+    /// v0.7.0 shipped the two-part vowel composition and it had **no effect whatever**
+    /// on Word, Excel or PowerPoint. Two separate reasons, both invisible to the
+    /// existing tests:
+    ///
+    /// 1. This file does not call `classify::convert_pieces`; it duplicates that loop,
+    ///    so the change made there never ran here.
+    /// 2. Even once added, a part is only kept if the rewrite *did* something, and
+    ///    that test counted converted words and renamed fonts only. A document that
+    ///    needed nothing but composition had its rewrite computed and thrown away.
+    ///
+    /// Measured on the release over 1,059 real documents: 9,904 decomposed pairs
+    /// survived inside real text elements. This test uses a document with NO legacy
+    /// text at all, which is what makes it catch reason 2.
+    #[test]
+    fn a_document_needing_only_normalisation_is_still_rewritten() {
+        // মোট লোক, written with the decomposed vowel, in an ordinary Unicode font.
+        let decomposed = "\u{09AE}\u{09C7}\u{09BE}\u{099F} \u{09B2}\u{09C7}\u{09BE}\u{0995}";
+        let xml = format!(
+            concat!(
+                "<w:document xmlns:w=\"http://schemas.openxmlformats.org/",
+                "wordprocessingml/2006/main\"><w:body><w:p><w:r>",
+                "<w:rPr><w:rFonts w:ascii=\"Nirmala UI\"/></w:rPr>",
+                "<w:t>{}</w:t></w:r></w:p></w:body></w:document>"
+            ),
+            decomposed
+        );
+        let (out, summary) =
+            convert_office(&build_docx(&xml), "Nirmala UI").expect("it should convert");
+
+        assert_eq!(
+            summary.words_converted, 0,
+            "there is no legacy text here; nothing should be counted as converted"
+        );
+        assert_eq!(
+            summary.words_normalised, 2,
+            "both words carry a decomposed vowel and both should be composed"
+        );
+
+        let mut archive = zip::ZipArchive::new(Cursor::new(&out[..])).unwrap();
+        let mut got = String::new();
+        archive
+            .by_name("word/document.xml")
+            .unwrap()
+            .read_to_string(&mut got)
+            .unwrap();
+        assert!(
+            !got.contains("\u{09C7}\u{09BE}"),
+            "a decomposed vowel survived into the output: the rewrite was discarded"
+        );
+        assert!(
+            got.contains('\u{09CB}'),
+            "the composed vowel is absent: {got}"
         );
     }
 
