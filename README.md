@@ -81,7 +81,8 @@ named itself is never replaced unless you add `--force`.
 
 | Format | What happens |
 |---|---|
-| `.txt` `.csv` `.md` `.json` | Converted. Windows-1252 detected automatically — which is what legacy Bangla files usually are |
+| `.txt` `.csv` `.md` | Converted. Windows-1252 detected automatically — which is what legacy Bangla files usually are |
+| `.json` | **Refused since 0.8.0, deliberately.** Converting one could produce a file that no longer loads: a Bijoy quotation mark becomes a plain `"`, which ends a JSON string early. It happened to 5 of 13 real files the first time JSON was ever tested, on 19 August 2026. Converting it properly needs a JSON parser as a dependency, and the format was dropped instead of adding one |
 | `.docx` `.xlsx` `.pptx` | Converted **inside the document**. Formatting, tables and images untouched. Includes SmartArt, charts, speaker notes and comments |
 | `.pdf` | **Read-only, best effort.** Text extracted and converted; layout is lost |
 | Older `.doc` `.xls` `.ppt` | Converted into a **new** `.docx`, `.xlsx` or `.pptx` beside the original. **Text only** — these formats hold no formatting we can carry, and no font information, so accuracy matches plain text rather than the higher figure above |
@@ -297,7 +298,7 @@ rules, and two dictionaries built into the binary: 451,348 Bangla words and
 ## Build it yourself
 
 ```sh
-cargo test --workspace     # 144 tests, no network needed
+cargo test --workspace     # 152 tests, no network needed
 cargo run -p mukti-cli    # the command-line tool
 ```
 

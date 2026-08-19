@@ -86,6 +86,7 @@ mukti convert report.docx --in-place
 | Kind of file | What you get |
 |---|---|
 | Text (`.txt`, `.csv`, `.md`) | Converted, saved as a new text file |
+| JSON (`.json`) | **Not converted.** Mukti refuses these and tells you why — converting one could break the file so it no longer opens |
 | Word (`.docx`) | Converted inside the document; formatting kept |
 | Excel (`.xlsx`) | Converted inside the workbook; formatting kept |
 | PowerPoint (`.pptx`) | Converted inside the slides; formatting kept |

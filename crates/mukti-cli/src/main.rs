@@ -38,7 +38,7 @@ const USAGE: &str = "\
 GRU953 Mukti — convert legacy Bangla text to Unicode.
 
   mukti convert <file>...    convert files, writing a new file beside each one
-                             (.txt .csv .md .json, .docx .xlsx .pptx,
+                             (.txt .csv .md, .docx .xlsx .pptx,
                               .doc .xls .ppt, and .pdf)
   mukti check <file>...      say what would change, and write nothing
   mukti convert -            read from the keyboard or a pipe, write to screen
@@ -225,6 +225,45 @@ fn handle(
             return handle_legacy(path, legacy, mode, in_place, out, quiet, force);
         }
     }
+    // JSON is refused outright, and the reason is worth stating in full.
+    //
+    // It was listed as supported from 0.3.0 and never once tested. When it finally was,
+    // on 19 August 2026, **5 of 13 real JSON files came out invalid** -- the conversion
+    // tables map Bijoy's curly double quotes (0xD2 and 0xD3) to a plain ASCII `"`,
+    // which ends a JSON string value early and makes the file unloadable.
+    //
+    // Converting it properly means parsing the JSON, converting only the string
+    // contents and re-serialising with correct escaping. That needs a JSON parser as a
+    // dependency, and the owner chose on 19 August 2026 to drop the format instead
+    // rather than add one for a format nobody had asked for.
+    //
+    // Refusing is the honest implementation of that choice. There is no list of
+    // supported text extensions to remove JSON from -- anything unrecognised falls
+    // through to the plain-text path below -- so removing it from the documentation
+    // alone would have left the corruption in place while claiming otherwise.
+    //
+    // A pipe cannot be checked this way, because a pipe has no name. `cat x.json |
+    // mukti convert -` is still treated as plain text, and the message below says so.
+    if !from_pipe
+        && path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(str::to_lowercase)
+            .as_deref()
+            == Some("json")
+    {
+        return Err(format!(
+            "{} is a JSON file, and Mukti no longer converts JSON.\n\
+             Converting it could produce a file that no longer loads: a Bijoy quotation \
+             mark becomes a plain \" character, which ends a JSON value early. That was \
+             happening to real files, so the format was withdrawn rather than left to \
+             corrupt them.\n\
+             If the Bangla inside it needs converting, copy the text into a .txt file \
+             and convert that, then put it back.",
+            path.display()
+        ));
+    }
+
     if !from_pipe
         && path
             .extension()
@@ -688,5 +727,57 @@ mod clobber_tests {
         assert!(refuse_to_clobber(&free, false).is_ok());
 
         let _ = fs::remove_file(&taken);
+    }
+
+    /// A `.json` file is refused, and nothing is written.
+    ///
+    /// JSON was advertised as supported from 0.3.0 and never tested. When it finally
+    /// was, on 19 August 2026, 5 of 13 real files came out invalid: the tables map
+    /// Bijoy's curly double quotes to a plain `"`, which ends a JSON string value
+    /// early. Converting it properly needs a JSON parser as a dependency, and the
+    /// format was dropped instead.
+    ///
+    /// The test asserts BOTH halves of that: the refusal happens, and no output file
+    /// appears. Refusing while still writing something would be worse than either.
+    #[test]
+    fn a_json_file_is_refused_and_nothing_is_written() {
+        let dir = std::env::temp_dir().join("mukti-json-refusal-test");
+        let _ = fs::create_dir_all(&dir);
+        let input = dir.join("m.json");
+        // Bijoy with the curly quote that breaks the JSON, plus enough context that
+        // the detector would otherwise act on it.
+        fs::write(
+            &input,
+            b"{\n  \"a\": \"Kg\xa9m~wP cP\xd6wZ\xa1e`b\",\n  \"b\": \"\xd3Kg\xa9m~wP\xd2\"\n}\n",
+        )
+        .expect("write the fixture");
+        let produced = dir.join("m.unicode.json");
+        let _ = fs::remove_file(&produced);
+
+        let result = handle(
+            &input,
+            Mode::Convert,
+            false,
+            None,
+            true,
+            false,
+            "Nirmala UI",
+        );
+
+        let message = match result {
+            Err(m) => m,
+            Ok(_) => panic!("a .json file must be refused, not converted"),
+        };
+        assert!(
+            message.contains("no longer converts JSON"),
+            "the refusal should say plainly that JSON is not converted: {message}"
+        );
+        assert!(
+            !produced.exists(),
+            "a file was written despite the refusal, which is worse than either \
+             converting or refusing cleanly"
+        );
+
+        let _ = fs::remove_file(&input);
     }
 }

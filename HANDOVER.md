@@ -35,7 +35,7 @@ project's effort went.
       eval/           the measurement harness
     .github/workflows/  CI on three platforms; release builds
 
-About 11,100 lines of Rust and nothing else — no HTML, no CSS, no JavaScript, no
+About 11,800 lines of Rust and nothing else — no HTML, no CSS, no JavaScript, no
 npm, no bundler, no framework. Until 15 August 2026 there was also a desktop
 window with a small web front end; it was removed, and `assets/brand/` went with
 it.
@@ -75,7 +75,7 @@ Then:
 cargo test --workspace
 ```
 
-144 tests, all passing. Then the command-line tool:
+152 tests, all passing. Then the command-line tool:
 
 ```bash
 cargo run -p mukti-cli -- check <file>
@@ -244,6 +244,34 @@ ones that will bite a newcomer.
    fonts' repository root carries Apache-2.0, which covers the build tooling.
    The fonts themselves are OFL 1.1, stated in each font's own embedded licence
    field. Check the artefact, not the folder.
+
+## 7b. Measured against the whole corpus, 19 August 2026
+
+The published binaries were run over the full 1,173-file test corpus twice — v0.7.0 and
+then v0.7.1 — with the harness rebuilt first, because three of its earlier answers were
+wrong. Everything below comes from those runs, not from the unit tests.
+
+| | Result |
+|---|---|
+| Files converted | **1,173 of 1,173**, every one exiting 0, across ten formats |
+| Round-trip word accuracy | **99.9764%** of 2,686,285 words |
+| Round-trip character accuracy | **99.9933%** of 13,558,475 characters |
+| Office files aligned for detection | **750 of 750**, none discarded |
+| Tokens aligned | 7,801,733 |
+| English words wrongly converted | **0** |
+| 422 KB English negative control | **byte-for-byte identical** |
+
+**The most useful figure is the one that looks worst.** Ten Bijoy/Unicode pairs published
+by another project — independent ground truth, not our own encoder — give **82.40%** word
+accuracy. Every one of the 69 mismatches was classified: **65 were the detector declining
+to convert, 4 were quote style, and 0 were conversion errors.** The tables are flawless
+against outside data. The entire shortfall is the documented refusal to touch short
+pure-ASCII Bijoy in a plain text file, where no font proves the encoding.
+
+That distinction matters for anyone quoting these numbers: the round trip measures the
+CONVERSION, because it feeds the tables text our own encoder produced. The independent
+pairs measure the WHOLE PRODUCT including the detector's decision — and the detector is
+where essentially all the remaining loss is. See LESSONS §39.
 
 ## 8. What is open
 

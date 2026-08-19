@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.8.0 — 19 August 2026
+
+**One removal, and it is a removal rather than a fix on purpose.** `.json` is no longer
+a supported format. The minor version rises because a documented format has been
+withdrawn, which is a breaking change for anyone who scripted it.
+
+### Removed
+
+- **`.json` support.** It was listed as supported from 0.3.0 and **never once tested.**
+  The first time JSON was put through Mukti, on 19 August 2026, **5 of 13 real files
+  came out invalid.** The conversion tables map Bijoy's curly double quotes (`Ò` and
+  `Ó`) to a plain ASCII `"`, which ends a JSON string value early and makes the file
+  unloadable.
+
+  Reproduced in 100 bytes:
+
+      {"b": "ÓKg©m~wPÒ Gi Rb¨"}   ->   {"b": ""কর্মসূচি" Gi জন্য"}
+
+  Converting JSON properly means parsing it, converting only the string contents and
+  re-serialising with correct escaping. That needs a JSON parser as a dependency, and
+  the choice was to drop a format nobody had asked for rather than add one.
+
+  **Refusing is the honest implementation of that choice.** There was no list of
+  supported text extensions to remove JSON from — anything unrecognised falls through
+  to the plain-text path — so editing the documentation alone would have left the
+  corruption in place while claiming otherwise. `mukti convert x.json` now explains
+  what would go wrong and writes nothing. `.txt`, `.csv` and `.md` are unaffected: none
+  of them has escaping rules to break.
+
+  A pipe cannot be checked this way, because a pipe has no name. `cat x.json | mukti
+  convert -` is still treated as plain text, and the refusal message says so.
+
+### Verified
+
+152 tests (one new, asserting both that the refusal happens and that no file is
+written — refusing while still writing something would be worse than either), clippy
+clean, formatting clean, `cargo deny` clean.
+
+Everything else is unchanged from 0.7.1, which was tested against all 1,173 corpus
+files on 19 August: 1,173 of 1,173 converted with every one exiting 0, round-trip
+accuracy 99.9764% of words and 99.9933% of characters, zero English words wrongly
+converted across 7,801,733 aligned tokens, and a 422 KB English negative control that
+came out byte-for-byte identical.
+
+
 ## 0.7.1 — 19 August 2026
 
 **One fix: the Unicode normalisation 0.7.0 announced did not work on Word, Excel or
