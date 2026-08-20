@@ -182,11 +182,35 @@ static CORRECTIONS: &[(&str, &str)] = &[
 fn apply_map(input: &str, map: &[(&str, &str)]) -> String {
     let mut out = input.to_owned();
     for (from, to) in map {
-        if let Some(at) = out.find(from) {
+        // A one-character key is searched for as a `char`, not a `&str`, and
+        // that is where most of the time in this function went.
+        //
+        // 187 of CONVERSION_MAP's 191 keys are a single character. Handing
+        // `find`/`replace` a `&str` makes them build a Two-Way substring
+        // searcher -- setup that measured at roughly a THIRD of this
+        // function's entire cost, for needles that need none of it. A `char`
+        // pattern goes down a much shorter path. Output cannot differ: a
+        // one-character `&str` and the `char` it holds match at exactly the
+        // same positions, and the differential test below covers every rule
+        // of every real table either way.
+        let mut key = from.chars();
+        let single = match (key.next(), key.next()) {
+            (Some(c), None) => Some(c),
+            _ => None,
+        };
+        let found = match single {
+            Some(c) => out.find(c),
+            None => out.find(*from),
+        };
+        if let Some(at) = found {
             let mut next = String::with_capacity(out.len());
             next.push_str(&out[..at]);
             next.push_str(to);
-            next.push_str(&out[at + from.len()..].replace(from, to));
+            let rest = &out[at + from.len()..];
+            match single {
+                Some(c) => next.push_str(&rest.replace(c, to)),
+                None => next.push_str(&rest.replace(*from, to)),
+            }
             out = next;
         }
     }
@@ -497,7 +521,17 @@ fn rearrange(input: &str) -> String {
         i += 1;
     }
 
-    s.into_iter().collect()
+    // Not `s.into_iter().collect()`, and the reason is measurable.
+    //
+    // `String: FromIterator<char>` reserves the iterator's lower size hint,
+    // which counts CHARACTERS, as though it were a count of BYTES. Bengali is
+    // three bytes per character, so that under-reserves by a factor of three
+    // and the string regrows twice on the way out: three allocations where one
+    // will do. Reserving the worst case up front costs a little slack and one
+    // allocation.
+    let mut out = String::with_capacity(s.len() * 3);
+    out.extend(s);
+    out
 }
 
 /// Compose Bengali's two composite vowel signs. Unicode NFC, and nothing else.
@@ -851,9 +885,21 @@ fn reunite_split_vowels(s: &str) -> String {
 /// exactly the mechanism that could hide the reordering faults this file
 /// records three times over. Corrected 20 August 2026.
 fn compose_two_part_vowels(s: &str) -> String {
-    let s = s
-        .replace("\u{09C7}\u{09BE}", "\u{09CB}") // ে + া -> ো
-        .replace("\u{09C7}\u{09D7}", "\u{09CC}"); // ে + ৗ -> ৌ
+    // The composition step is [`compose_canonical_vowels`], not two chained
+    // `.replace()` calls.
+    //
+    // Those two calls did exactly the same substitution, but each allocated a
+    // full-length copy of the text **whether or not either pattern was
+    // present** -- `str::replace` allocates its output even when it matches
+    // nothing. On every conversion, twice. `compose_canonical_vowels` performs
+    // the identical substitution in one pass, and returns early when the text
+    // holds no `ে` at all, which is the overwhelmingly common case.
+    //
+    // Only the composition is shared. The two DELETING passes below stay
+    // exactly where they were: the doc comment on `compose_canonical_vowels`
+    // is emphatic that it must never grow into a repair, and this function
+    // calling it does not make it one.
+    let s = compose_canonical_vowels(s);
     let s = collapse_impossible_doubles(&s);
     let s = repair_mistyped_vowels(&s);
     reunite_split_vowels(&s)
@@ -892,7 +938,45 @@ fn repair_mistyped_vowels(s: &str) -> String {
     out
 }
 
+/// How many times [`repair_word`] hit its last resort and dropped a character
+/// without the word list agreeing which one to drop.
+///
+/// Instrumentation, not behaviour. The fallback below removes a character when
+/// the lexicon recognises NEITHER candidate or BOTH -- that is, exactly when it
+/// has no evidence -- and a silent unconditional deletion is the mechanism most
+/// likely to hide the reordering faults this file records three times over.
+/// There is no logging dependency in this crate and there is not going to be
+/// one, so the count is exposed as a counter a test or a devtool can read.
+///
+/// `Relaxed` is right: this is a diagnostic tally, and nothing branches on it.
+pub static BLIND_VOWEL_DROPS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Read the [`BLIND_VOWEL_DROPS`] tally.
+pub fn blind_vowel_drops() -> u64 {
+    BLIND_VOWEL_DROPS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 fn repair_word(word: &str) -> String {
+    // The cheap test runs on `&str`, before anything is allocated.
+    //
+    // This used to `chars().collect::<Vec<char>>()` first and ask afterwards
+    // -- roughly three allocations for every word in every document, when the
+    // answer for almost all of them is "nothing to repair". The scan below
+    // allocates nothing and answers the same question.
+    let mut previous_was_kar = false;
+    let mut has_adjacent_kars = false;
+    for c in word.chars() {
+        let this_is_kar = is_kar(c);
+        if this_is_kar && previous_was_kar {
+            has_adjacent_kars = true;
+            break;
+        }
+        previous_was_kar = this_is_kar;
+    }
+    if !has_adjacent_kars {
+        return word.to_owned();
+    }
+
     let chars: Vec<char> = word.chars().collect();
     let Some(at) = chars.windows(2).position(|w| is_kar(w[0]) && is_kar(w[1])) else {
         return word.to_owned();
@@ -926,8 +1010,41 @@ fn repair_word(word: &str) -> String {
         // the likely mistake: `অনিুযায়ী` -> `অনুযায়ী`. When the first sign is a
         // correctly-placed post-kar, the second is the intruder instead:
         // `নারীাদের` -> `নারীদের`. Both real, and in opposite directions.
-        _ if is_pre_kar(chars[at]) => first,
-        _ => second,
+        // Neither candidate is recognised, or both are: no evidence either
+        // way, so a character is dropped on structure alone. Counted, because
+        // that is a silent deletion.
+        _ => {
+            BLIND_VOWEL_DROPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            match blind_choice(&chars, at) {
+                BlindChoice::DropFirst => first,
+                BlindChoice::DropSecond => second,
+            }
+        }
+    }
+}
+
+/// Which of two adjacent vowel signs to drop when the word list cannot say.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlindChoice {
+    DropFirst,
+    DropSecond,
+}
+
+/// The structural guess, extracted so it can be tested directly.
+///
+/// It used to be two inline match arms, which meant the only way to check it
+/// was to find an input that reached them and read a global counter -- a test
+/// that passes whether or not it ever got there. This takes the decision out
+/// where it can be asked the question straight.
+fn blind_choice(chars: &[char], at: usize) -> BlindChoice {
+    if is_pre_kar(chars[at]) {
+        // A pre-kar is the sign the reordering moves, so a stranded one is the
+        // likely mistake: `অনিুযায়ী` -> `অনুযায়ী`.
+        BlindChoice::DropFirst
+    } else {
+        // A correctly-placed post-kar first means the SECOND is the intruder:
+        // `নারীাদের` -> `নারীদের`.
+        BlindChoice::DropSecond
     }
 }
 
@@ -2155,6 +2272,143 @@ mod tests {
         }
     }
 
+    /// The four tables are the size their comments claim.
+    ///
+    /// Counted here rather than trusted, because all three stated counts in
+    /// this crate were wrong at once on 20 August 2026: `tables.rs` said 190
+    /// entries for 191, and the differential test below said 226 rules for
+    /// 224. A count in a comment is a claim, and this crate treats its
+    /// comments as part of its contract.
+    #[test]
+    fn the_conversion_tables_are_the_size_their_comments_claim() {
+        assert_eq!(tables::PRE_MAP.len(), 15, "PRE_MAP");
+        assert_eq!(tables::CONVERSION_MAP.len(), 191, "CONVERSION_MAP");
+        assert_eq!(tables::POST_MAP.len(), 17, "POST_MAP");
+        assert_eq!(super::CORRECTIONS.len(), 1, "CORRECTIONS");
+        let total = tables::PRE_MAP.len()
+            + tables::CONVERSION_MAP.len()
+            + tables::POST_MAP.len()
+            + super::CORRECTIONS.len();
+        assert_eq!(total, 224, "the differential test's comment says 224 rules");
+    }
+
+    /// `¤œ` reaches the right answer by the wrong road, and that is pinned.
+    ///
+    /// `CONVERSION_MAP`'s `("¤œ", "ম্ন")` rule is unreachable -- `("œ", "্ন")`
+    /// sits earlier and always eats the `œ` first -- so `¤œ` actually becomes
+    /// `ম` + halant + halant + `ন`, and `collapse_doubled_halants` then removes
+    /// the doubled halant to give `ম্ন`. The output is correct, but only
+    /// because of that downstream cleanup.
+    ///
+    /// This test exists so that if the cleanup ever changes, the failure is
+    /// loud here rather than silent in real documents. See the comment on
+    /// `CONVERSION_MAP` for why the table is not reordered instead.
+    #[test]
+    fn the_unreachable_conjunct_rule_still_produces_the_right_word() {
+        // ম্ন, reached via rule 92 + rule 98 + the doubled-halant collapse,
+        // never via the ¤œ rule itself.
+        assert_eq!(super::convert("¤œ"), "ম্ন");
+        // In a real word: নিম্ন, the Bijoy spelling.
+        assert_eq!(super::convert("wb¤œ"), "নিম্ন");
+    }
+
+    /// A lone `¹`, `²` or `³` is never converted, and inside a word nothing
+    /// changes.
+    ///
+    /// The lone case was a real false positive in English documents: a footnote
+    /// marker `¹` became জ্ঞ, because that bare consonant cluster happens to be
+    /// in the shipped word list. The inside-a-word case is the guard against
+    /// over-correcting: widening the sub/superscript rule to cover these three
+    /// cost 2.2 points of recall and was reversed.
+    #[test]
+    fn a_lone_superscript_is_left_alone_but_one_inside_a_word_is_not() {
+        use crate::classify::{classify_words, Verdict};
+        use crate::dictionary::Dictionary;
+        let d = Dictionary::shipped();
+        for lone in ["\u{00B9}", "\u{00B2}", "\u{00B3}"] {
+            assert_eq!(
+                classify_words(&[lone], d)[0],
+                Verdict::NotLegacy,
+                "a lone {lone:?} must not convert"
+            );
+        }
+        // `j²x` is লক্ষ্মী: the same character, inside a word, still converts.
+        assert_eq!(super::convert("j²x"), "লক্ষ্মী");
+    }
+
+    /// A conversion opening on a character Bengali never opens a word with is
+    /// not plausible.
+    ///
+    /// `Tomáš` -- a Czech name in real English documents -- was converting to
+    /// `ঞড়সপ্সন্` because two accented Latin letters are genuine Bijoy table
+    /// entries and the density rule fired. No Bengali word begins with `ঞ`.
+    #[test]
+    fn a_conversion_opening_on_an_impossible_letter_is_refused() {
+        use crate::classify::{classify_words, Verdict};
+        use crate::dictionary::Dictionary;
+        let d = Dictionary::shipped();
+        assert_eq!(
+            classify_words(&["Tom\u{00E1}\u{0161}"], d)[0],
+            Verdict::NotLegacy,
+            "an accented Latin name must not convert"
+        );
+    }
+
+    /// The blind guess goes both ways, and this asks it directly.
+    ///
+    /// The first version of this test called `convert` on a guessed literal
+    /// and asserted the global counter had not gone *backwards* -- which is
+    /// true of any monotone counter, including one that never moves at all.
+    /// It would have passed if the fallback were unreachable. Asking
+    /// `blind_choice` straight needs no witness input and cannot race another
+    /// test's `convert` call.
+    #[test]
+    fn the_blind_vowel_drop_chooses_by_which_sign_is_the_intruder() {
+        // A pre-kar first: the stranded pre-kar is the mistake, drop it.
+        let pre_first: Vec<char> = "\u{09BF}\u{09BE}".chars().collect();
+        assert!(super::is_pre_kar(pre_first[0]), "test premise");
+        assert_eq!(
+            super::blind_choice(&pre_first, 0),
+            super::BlindChoice::DropFirst
+        );
+
+        // A post-kar first: it is correctly placed, so the second intrudes.
+        let post_first: Vec<char> = "\u{09BE}\u{09BF}".chars().collect();
+        assert!(!super::is_pre_kar(post_first[0]), "test premise");
+        assert_eq!(
+            super::blind_choice(&post_first, 0),
+            super::BlindChoice::DropSecond
+        );
+    }
+
+    /// The counter moves when, and only when, the blind branch is taken.
+    ///
+    /// `>` rather than `>=`, so a fallback that stopped being reachable would
+    /// fail this rather than pass it. Both halves are asserted: a word with no
+    /// adjacent vowel signs must not move the counter at all.
+    #[test]
+    fn the_blind_vowel_drop_counter_moves_only_on_a_blind_drop() {
+        // Nothing to repair: two ordinary words, no adjacent vowel signs.
+        let before_clean = super::blind_vowel_drops();
+        let _ = super::repair_word("\u{0995}\u{09BF}");
+        assert_eq!(
+            super::blind_vowel_drops(),
+            before_clean,
+            "a word needing no repair moved the counter"
+        );
+
+        // Two adjacent vowel signs in a nonsense word the list cannot know,
+        // so neither candidate is recognised and the blind branch is taken.
+        let before = super::blind_vowel_drops();
+        let repaired = super::repair_word("\u{0995}\u{09BF}\u{09BE}\u{0995}\u{0996}");
+        let after = super::blind_vowel_drops();
+        assert!(
+            after > before,
+            "the blind branch was not reached, so this test proves nothing: \
+             {before} -> {after}, repaired to {repaired:?}"
+        );
+    }
+
     /// `apply_map`'s one-`find` form must agree with the `contains`-then-
     /// `replace` form it replaced, on every real table and on the shapes most
     /// likely to break it: a rule matching at the very start, at the very end,
@@ -2186,7 +2440,7 @@ mod tests {
         ];
         // Every single key from every table, alone, doubled, and padded on
         // both sides -- so a rule whose match sits at index 0, at the end, or
-        // twice over is covered for all 226 rules rather than a chosen few.
+        // twice over is covered for all 224 rules rather than a chosen few.
         for (_, table) in tables {
             for (from, _) in table {
                 cases.push((*from).to_owned());

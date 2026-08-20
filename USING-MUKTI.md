@@ -197,7 +197,7 @@ find one, it is worth reporting.
 Measured, not estimated:
 
 - **99.989%** of words convert correctly (from 473,244 words tested).
-- **99.930%** of legacy Bangla words are found and converted (from 286,412).
+- **99.927%** of legacy Bangla words are found and converted (from 286,412).
 - **0.146%** of English words are wrongly converted — about 146 in 100,000.
 - **0.000%** of Bangla that was already correct is converted.
 

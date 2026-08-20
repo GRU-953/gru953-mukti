@@ -88,7 +88,7 @@ Then:
 cargo test --workspace
 ```
 
-240 tests, all passing. Then the command-line tool:
+246 tests, all passing. Then the command-line tool:
 
 ```bash
 cargo run -p mukti-cli -- check <file>
@@ -131,7 +131,7 @@ cargo run --release -p eval -- --corpus <corpus> --labels <labels> --split test
 |---|---|---|
 | Round-trip word accuracy | **99.989%** | 473,244 words |
 | Character grid | **100%** | 3,096 combinations |
-| Detection recall on legacy words | **99.930%** | 286,412 tokens |
+| Detection recall on legacy words | **99.927%** | 286,412 tokens |
 | False positives on English | **0.146%** | 186,894 tokens |
 | False positives on Unicode Bangla | **0.000%** | 1,189,851 tokens |
 | Misspellings preserved unchanged | 99.979% | 14,214 pairs |

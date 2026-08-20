@@ -366,9 +366,153 @@ several are the kind that would otherwise have quietly stayed wrong.
   third had no reader: guided mode prints in its own voice and has no
   flag-mode output to suppress. Recorded rather than quietly dropped.
 
+### Closing the items 0.9.0 had left open
+
+Four things were recorded as deferred earlier in this entry. Each was
+investigated properly before being either built or refused, and two of the
+refusals are more useful than the builds.
+
+**Two false positives in real English documents are fixed, both measured
+before they landed.** The English-only negative corpus — 311 Markdown files,
+66 notebooks and 8 Python files that must come through a conversion
+completely untouched — had four failures, open since 13 August. It is now
+**clean, 0 of 517**.
+
+- A lone `¹`, `²` or `³` is no longer converted. A footnote marker `¹` was
+  becoming জ্ঞ, because in Bijoy that character IS জ্ঞ and that bare
+  consonant cluster happens to be one of the 451,348 words in the shipped
+  list. The new rule says something narrow and structural: all three of those
+  Bijoy readings are **conjuncts**, and a conjunct is part of a word, never a
+  whole one. So a one-character token reading as one is impossible by
+  construction. **Measured cost: exactly zero** — identical recall on both
+  splits and both answer keys, zero legacy words newly missed. Nothing about
+  a `¹` inside a word changes: `j²x` is still লক্ষ্মী. This is deliberately
+  NOT the wider sub/superscript rule, which was measured at -2.2 points of
+  recall and reversed in an earlier release.
+- A conversion that would open on a character Bengali never opens a word with
+  — `ঞ` `ং` `ঃ` `ঁ` `ৎ` `ড়` `ঢ়` `য়` — is no longer treated as plausible.
+  `Tomáš`, a Czech name, was becoming `ঞড়সপ্সন্`: two accented Latin letters
+  are genuine Bijoy table entries, so the density rule fired. The premise was
+  checked against the shipped word list rather than assumed — **zero** of
+  451,348 words begin with five of those characters, and the fourteen that
+  begin with the other three are word-list noise. **Measured cost: -0.0023
+  percentage points of recall**, four tokens, against 0.93 points of headroom
+  on a 99% gate. Every one of those four was already producing a
+  non-dictionary output, and four of the ten across both splits were tokens
+  where the old behaviour mangled embedded English — `Thickness/†Lvqvi` came
+  out as `ঞযরপশহবংং/খোয়ার`. By this project's own asymmetry rule, refusing
+  those is a gain.
+
+Both changes are **monotone**: they can only turn a conversion off, never on,
+so neither can create a new false positive anywhere. Verified on the real
+corpus rather than argued: of 1,614 documents, 23 differ, and in every one of
+the 23 the converted count fell, the untouched count rose by exactly the same
+amount, the total was conserved, and no file broke. 47 words stopped
+converting in total.
+
+**`convert()` is 38.7% faster, and none of it came from the change the plan
+proposed.** Measured on the repository's own `bench inline`: 215,943 →
+299,590 words per second, against a noise floor of 0.03%.
+
+- One-character keys are searched for as a `char`, not a `&str`. 187 of
+  `CONVERSION_MAP`'s 191 keys are a single character, and handing `find` and
+  `replace` a `&str` made them build a Two-Way substring searcher — setup
+  measured at roughly a third of `apply_map`'s entire cost, for needles that
+  need none of it. Same algorithm, same rule order, and the existing
+  differential test covers it unchanged.
+- The stem list is nukta-folded once, not once per call. `word_hits` was
+  folding all of its stems on every call, three allocations each: **462
+  allocations per call**, against 107 for converting a whole ordinary line.
+  It is now 3.
+- The vowel composition uses the single-pass composer that already existed
+  instead of two chained `.replace()` calls. Those two allocated a
+  full-length copy of the text on every conversion **whether or not either
+  pattern was present** — `str::replace` allocates its output even when it
+  matches nothing.
+- `repair_word` asks whether there is anything to repair before allocating
+  rather than after, and `rearrange` reserves its output properly on the way
+  out. `String: FromIterator<char>` reserves the character count as though it
+  were a byte count, so Bengali at three bytes per character under-reserved
+  threefold and regrew twice.
+
+**The Aho–Corasick rewrite of `apply_map` was measured and refused.** Folding
+the tables into one pass was *proved* sound for `CONVERSION_MAP` and
+`POST_MAP` — zero cascading rule pairs across 18,145 and 136 ordered pairs,
+confirmed twice independently, and zero output differences over tens of
+millions of differential cases. It was still refused, for four reasons that
+only appeared once someone looked.
+
+`PRE_MAP` cannot be folded at all: its three descending newline rules are a
+deliberate hand-rolled iterated collapse, 15 cascading pairs, each
+demonstrated with an input where a single pass gives a different answer. The
+no-cascade property turns out to be **necessary but not sufficient** — the
+table `[("xa","Y"),("aa","Z")]` on input `"xaaa"` satisfies it and still
+diverges under one of the two obvious ways to write the resolution loop. The
+arithmetic does not favour it either: `convert()` is called one word at a
+time, mean 6.47 bytes, so on a million real tokens a single pass that builds
+its automaton per call is 1.10× while the `char` fast path that shipped
+instead is 1.85×, and only a cached automaton reaches 3.55×. And merging the
+two "clean" tables into one pass — the obvious next step — was measured to
+corrupt 223 words in 2,043,887: `"24th"` became `২৪ঃয` instead of `২৪:য`.
+Recorded so nobody re-derives it.
+
+**Threading two reusable buffers through `convert()` was also refused, on
+measurement.** A counting allocator put one conversion of an ordinary line at
+107 allocations; the seven stage boundaries the plan wanted to eliminate are
+**7 of those 107**, and on a longer input the share falls to 0.13%. An
+optimisation whose win shrinks as inputs grow is the wrong one, and the four
+changes listed above were found by looking for where the allocations
+actually were.
+
+**The one silent deletion in the converter is now counted and printed.**
+`repair_word` removes a character when the word list recognises neither
+candidate repair — no evidence either way, so it guesses from structure.
+That is defensible, and it is exactly the kind of mechanism that could hide
+a reordering fault, so it is tallied in `mukti-core` and `corpus-verify`
+prints the total on every corpus run. A tally nobody reads is not
+instrumentation.
+
+### Fixed: the release gate could not pass
+
+`./check-figures.sh` has been unusable since the answer-key rebuild earlier
+in this release, and nobody noticed because the way it failed looked like the
+thing it was built to do.
+
+The rebuild moved the English false-positive figure through its own 0.10%
+target, for a reason diagnosed at the time: the answer key labels genuine
+Bijoy as English (`Avq` → আয় 27 times, `UvKv` → টাকা 22 times). `eval`
+correctly exits non-zero on any missed target, so the script printed the
+report and stopped — **before reaching the section that compares every
+published figure against what was measured**. A gate that can never pass
+cannot report anything new either, and two of its own hard-coded figures had
+gone stale behind that failure.
+
+Now: exactly one named exception, with a **ceiling**. Any other missed target
+is still fatal, and the known one getting worse is fatal too. The stale
+figures are corrected, and the script passes again — so the five published
+accuracy figures are once more checked against the code on every run.
+
+### Fixed: three counts and one unreachable rule
+
+Every stated table count in `mukti-core` was wrong at once. `tables.rs` said
+190 entries for 191 — the Greek mu entry added in 0.7.0 was never counted —
+and a test comment said 226 rules for 224. All three are corrected and a new
+test counts the tables rather than trusting the comment, because in this
+project a number in a comment is a claim.
+
+While counting, one rule turned out to be unreachable: `("¤œ", "ম্ন")` can
+never fire, because `("œ", "্ন")` sits earlier in the same table and always
+eats the `œ` first. What actually happens is that `¤œ` becomes `ম` + halant +
+halant + `ন`, and the doubled-halant collapse downstream removes the extra —
+so the output is right after all, by a longer road. The table is **not**
+reordered: this project's rule is that a generated table is not reordered
+without evidence from the font. Instead the behaviour is pinned by a test, so
+if that downstream cleanup ever changes the failure is loud rather than
+silent in real documents.
+
 ### Verified
 
-**240 tests**, up from 153 at 0.8.0. Full workspace build, test, `cargo fmt
+**246 tests**, up from 153 at 0.8.0. Full workspace build, test, `cargo fmt
 --check`, `cargo clippy -D warnings` and `cargo deny check` all clean, and
 the clippy and test runs were repeated with `RUSTFLAGS` unset so the run
 matched what CI sees rather than what a local shell happened to export.

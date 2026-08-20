@@ -148,7 +148,7 @@ Re-measured from scratch on 20 August 2026, on a freshly rebuilt answer key of
 | Conversion, word accuracy | **99.989%** | 473,244 words |
 | Conversion, character accuracy | 99.997% | 3,879,440 characters |
 | Every consonant × every vowel and conjunct | **100%** | 3,096 combinations |
-| Detection, legacy words found | **99.930%** | 286,412 words |
+| Detection, legacy words found | **99.927%** | 286,412 words |
 | Detection, English wrongly converted | **0.146%** | 186,894 words |
 | Detection, Unicode Bangla wrongly converted | **0.000%** | 1,189,851 words |
 | Misspellings preserved, not "corrected" | 99.979% | 14,214 words |
@@ -338,7 +338,7 @@ rules, and two dictionaries built into the binary: 451,348 Bangla words and
 ## Build it yourself
 
 ```sh
-cargo test --workspace     # 240 tests, no network needed
+cargo test --workspace     # 246 tests, no network needed
 cargo run -p mukti-cli    # the command-line tool
 ```
 

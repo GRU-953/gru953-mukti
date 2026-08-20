@@ -101,11 +101,31 @@ const MIN_STEM_CHARS: usize = 3;
 /// list because they are real words and may be useful elsewhere, but they carry
 /// no weight as evidence.
 pub fn word_hits(text: &str) -> usize {
+    // The stems are folded ONCE, ever, not once per call.
+    //
+    // This function used to call `fold_nukta` on every stem on every call.
+    // `fold_nukta` is three chained `.replace()` calls, so three allocations
+    // each, and the list is long: measured at **462 allocations per call**,
+    // against 107 for converting a whole ordinary line. `repair_word` calls
+    // this twice, so a single word needing repair cost more allocation than
+    // the rest of the pipeline put together.
+    //
+    // Folding the stems is a pure function of a `const` list, so hoisting it
+    // into a `LazyLock` cannot change the answer -- only how often the same
+    // answer is computed. The short stems are filtered out here too, for the
+    // same reason: the set they produce is fixed.
+    static FOLDED_STEMS: std::sync::LazyLock<Vec<String>> = std::sync::LazyLock::new(|| {
+        STEMS
+            .iter()
+            .filter(|s| s.chars().count() >= MIN_STEM_CHARS)
+            .map(|s| fold_nukta(s))
+            .collect()
+    });
+
     let folded = fold_nukta(text);
-    STEMS
+    FOLDED_STEMS
         .iter()
-        .filter(|s| s.chars().count() >= MIN_STEM_CHARS)
-        .filter(|s| folded.contains(&fold_nukta(s)))
+        .filter(|s| folded.contains(s.as_str()))
         .count()
 }
 

@@ -115,6 +115,80 @@ fn has_sub_or_superscript(word: &str) -> bool {
         .any(|c| (0x2070..=0x209F).contains(&(c as u32)))
 }
 
+/// A whole token that is one Latin-1 superscript: `¹`, `²` or `³`.
+///
+/// These three are real Bijoy table entries -- `¹` is জ্ঞ, `²` is ক্ষ্ম, `³` is
+/// ক্ত -- and that is exactly why they cannot be excluded from the byte range,
+/// and why widening [`has_sub_or_superscript`] to cover them was measured at
+/// **-2.2 percentage points of recall** and reversed (see
+/// `Dev-Memory/DECISIONS.md`). This is a much narrower statement.
+///
+/// **Every one of those three Bijoy readings is a CONJUNCT** -- a consonant
+/// cluster that lives inside a word. A conjunct is never a whole word on its
+/// own, so a one-character token reading as one is impossible by construction,
+/// not merely unlikely. Nothing is inferred from the character's Unicode
+/// category, and nothing about a `¹` INSIDE a longer token changes: `j²x` is
+/// still লক্ষ্মী.
+///
+/// Measured cost: zero. Identical recall on both the tune and test splits and
+/// on both answer keys, identical pure-ASCII recovery, zero newly-missed legacy
+/// tokens. It removes a footnote marker in real English documents that was
+/// converting to জ্ঞ purely because that bare cluster happens to be in the
+/// 451,348-word list.
+fn is_lone_conjunct_glyph(word: &str) -> bool {
+    let mut chars = word.chars();
+    matches!(
+        (chars.next(), chars.next()),
+        (Some('\u{00B9}' | '\u{00B2}' | '\u{00B3}'), None)
+    )
+}
+
+/// Could this conversion be the start of a Bengali word at all?
+///
+/// Eight characters never begin one: `ঞ` `ং` `ঃ` `ঁ` `ৎ` `ড়` `ঢ়` `য়`. The first
+/// five are structurally impossible -- a candrabindu, anusvara or visarga
+/// modifies a preceding vowel, and there is nothing preceding at the start of a
+/// word. The last three are nukta forms that only ever follow.
+///
+/// The premise was checked against the shipped list rather than assumed: of
+/// 451,348 words, **zero** begin with `ং` `ঃ` `ঁ` `ৎ` `ঢ়`, and the fourteen
+/// beginning with `ঞ` `ড়` `য়` are all word-list noise. None of the fourteen is
+/// at risk anyway, because this narrows only `converted_plausible`, and a word
+/// the dictionary confirms is admitted by `converted_is_word` instead.
+///
+/// # Why this lives here and not in `word_is_well_formed`
+///
+/// **Placement is load-bearing.** `devtools/eval` calls `word_is_well_formed`
+/// to decide which words are EXCLUDED from the published M1 and M2 figures.
+/// Widening it there would move the measurement rather than the behaviour --
+/// the figures would shift for a reason that has nothing to do with accuracy.
+///
+/// Measured cost: -0.0023 percentage points of recall on the test split, four
+/// tokens, against 0.96 points of headroom on a 99% gate. Every one of the four
+/// was already producing a non-dictionary output, and in four of the ten across
+/// both splits the old behaviour was mangling embedded English --
+/// `Thickness/†Lvqvi` became `ঞযরপশহবংং/খোয়ার`. By this crate's own asymmetry
+/// rule, refusing those is a gain.
+fn opens_like_a_bengali_word(converted: &str) -> bool {
+    match converted
+        .chars()
+        .find(|c| ('\u{0980}'..='\u{09FF}').contains(c))
+    {
+        Some(
+            '\u{099E}' // ঞ
+            | '\u{0982}' // ং
+            | '\u{0983}' // ঃ
+            | '\u{0981}' // ঁ
+            | '\u{09CE}' // ৎ
+            | '\u{09DC}' // ড়
+            | '\u{09DD}' // ঢ়
+            | '\u{09DF}', // য়
+        ) => false,
+        // No Bengali at all is not this rule's business to refuse.
+        _ => true,
+    }
+}
+
 /// What one word looks like, before any judgement is made about it.
 #[derive(Debug, Clone)]
 struct Features {
@@ -152,6 +226,13 @@ struct Features {
     is_roman_numeral_marker: bool,
     /// A true Unicode sub/superscript character is present. Same reason.
     has_sub_or_superscript: bool,
+    /// The whole token is one Latin-1 superscript, whose Bijoy reading is a
+    /// conjunct and therefore cannot be a word. A field rather than an inline
+    /// test purely so `diagnose_alone` can name this as the reason: without
+    /// it, a lone `¹` reported "not a dictionary word and not plausible",
+    /// which is true only because no conversion was ever attempted. A
+    /// diagnosis that is accidentally true is worse than none.
+    is_lone_conjunct_glyph: bool,
     /// How many letters and digits the word has. One is never enough.
     alphanumeric: usize,
 }
@@ -320,6 +401,7 @@ impl Features {
 
         let is_roman_numeral_marker = is_roman_numeral_marker(word);
         let has_sub_or_superscript = has_sub_or_superscript(word);
+        let is_lone_conjunct_glyph = is_lone_conjunct_glyph(word);
 
         // Trial conversion is skipped wherever `judge_alone`'s two hard stops
         // would discard it unread: text that is already Bengali or has
@@ -342,14 +424,16 @@ impl Features {
             || is_inert
             || is_english
             || is_roman_numeral_marker
-            || has_sub_or_superscript;
+            || has_sub_or_superscript
+            || is_lone_conjunct_glyph;
         let (converted_is_word, converted_plausible, converted) = if hard_stop {
             (false, false, None)
         } else {
             let converted = convert(word);
             let trimmed = trim_to_bengali(&converted);
             let is_word = !trimmed.is_empty() && dictionary.contains(trimmed);
-            let plausible = word_is_well_formed(&converted);
+            let plausible =
+                word_is_well_formed(&converted) && opens_like_a_bengali_word(&converted);
             (is_word, plausible, Some(converted))
         };
 
@@ -366,6 +450,7 @@ impl Features {
             is_english,
             is_roman_numeral_marker,
             has_sub_or_superscript,
+            is_lone_conjunct_glyph,
         }
     }
 }
@@ -477,6 +562,9 @@ pub fn diagnose_alone(word: &str, dictionary: &Dictionary) -> &'static str {
     }
     if f.has_sub_or_superscript {
         return "hard_stop_sub_or_superscript";
+    }
+    if f.is_lone_conjunct_glyph {
+        return "hard_stop_lone_conjunct_glyph";
     }
     if f.converted_is_word && f.has_exotic {
         return "legacy_byte_and_dictionary";

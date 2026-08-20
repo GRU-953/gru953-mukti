@@ -31,7 +31,28 @@ pub static PRE_MAP: &[(&str, &str)] = &[
 // 3 regex-only key(s) from PRE_MAP are handled in
 // `normalise_whitespace()` instead: [' +', '\n +', ' +\n']
 
-/// The main Bijoy glyph table. 190 entries, longest-first.
+/// The main Bijoy glyph table. 191 entries, longest-first.
+///
+/// The count was stated as 190 until 20 August 2026; the `\u{00B5}` (Greek mu)
+/// entry added in 0.7.0 made it 191 and the comment was not updated with it.
+/// Counted mechanically, not by hand.
+///
+/// # One rule here is unreachable, and it is harmless
+///
+/// `("¤œ", "ম্ন")` can never fire. Its key contains `("œ", "্ন")`, which sits
+/// EARLIER in this table, so by the time the `¤œ` rule is considered the `œ`
+/// is already gone. What actually happens to `¤œ` is: `œ` becomes `্ন`, then
+/// `("¤", "ম্")` claims the `¤`, giving `ম` + halant + halant + `ন` -- and
+/// `collapse_doubled_halants` in `lib.rs` then removes the doubled halant, so
+/// the final output is `ম্ন` after all. The intended answer, by a longer road.
+///
+/// **Left in place deliberately.** Moving `¤œ` above `œ` would make it live and
+/// remove the dependence on that downstream cleanup, and the end-to-end output
+/// would be unchanged -- but it is still a reordering of a generated table, and
+/// this project's rule (LESSONS §3) is that a table is not reordered without
+/// evidence from the font. The behaviour is pinned by a test in `lib.rs` so
+/// that if the downstream cleanup ever changes, the failure is loud rather than
+/// silent.
 pub static CONVERSION_MAP: &[(&str, &str)] = &[
     ("Av", "আ"),
     ("A", "অ"),

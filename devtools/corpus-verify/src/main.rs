@@ -426,6 +426,22 @@ fn run() -> Result<usize, String> {
     println!("Report: {}", cfg.out.display());
     println!("\n{} file(s) checked, {} defect(s).", done, defects);
 
+    // The one silent deletion in the converter, surfaced on every corpus run.
+    //
+    // `repair_word` drops a character when the word list recognises neither
+    // candidate repair -- no evidence either way, so it guesses from
+    // structure. That is defensible, and it is exactly the kind of mechanism
+    // that could hide a reordering fault, so `mukti-core` counts it. A tally
+    // nobody reads is not instrumentation, which is why it is printed here:
+    // this tool is the thing that runs over every document there is.
+    let blind = gru953_mukti::blind_vowel_drops();
+    if blind > 0 {
+        println!(
+            "Blind vowel drops: {blind} (a character removed on structure \
+             alone, because the word list knew neither candidate)"
+        );
+    }
+
     if let Some(previous) = &cfg.compare {
         report.flush().map_err(|e| e.to_string())?;
         compare_reports(previous, &cfg.out, cfg.compare_entries)?;
