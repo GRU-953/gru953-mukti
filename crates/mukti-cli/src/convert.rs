@@ -61,6 +61,18 @@ pub fn convert_one(path: &Path, mode: Mode, opts: &Options) -> Result<Outcome, S
     }
 }
 
+/// Whether this file's extension is one of the six, without reading it.
+pub(crate) fn is_supported(path: &Path) -> bool {
+    extension_kind(path).is_some()
+}
+
+/// The refusal a caller would get for an unsupported file, without attempting
+/// the conversion first. Guided mode uses this to say so at the point it knows,
+/// rather than asking a question whose answer cannot matter.
+pub(crate) fn refusal_for(path: &Path) -> String {
+    refusal_for_unsupported(path)
+}
+
 fn refusal_for_unsupported(path: &Path) -> String {
     match path
         .extension()
@@ -107,6 +119,7 @@ fn handle_office(path: &Path, mode: Mode, opts: &Options) -> Result<Outcome, Str
     let tally = Tally {
         converted: summary.words_converted,
         untouched: summary.words_untouched,
+        normalised: summary.words_normalised,
     };
 
     if mode == Mode::Check {
@@ -161,6 +174,7 @@ fn handle_legacy(
     let tally = Tally {
         converted: outcome.summary.words_converted,
         untouched: outcome.summary.words_untouched,
+        normalised: outcome.summary.words_normalised,
     };
 
     if mode == Mode::Check {
@@ -449,6 +463,9 @@ fn print_success(path: &Path, mode: Mode, outcome: &Outcome, opts: &Options) {
             if let Some(fonts) = outcome.fonts_changed {
                 println!("  {fonts} font settings would change to {}.", opts.font);
             }
+            if let Some(note) = outcome.tally.normalisation_note(mode) {
+                println!("  {note}");
+            }
             if let Some(notice) = outcome.legacy_notice {
                 println!("  {notice}");
             }
@@ -465,6 +482,9 @@ fn print_success(path: &Path, mode: Mode, outcome: &Outcome, opts: &Options) {
                     "  {fonts} font settings changed to {}; formatting and images untouched.",
                     opts.font
                 );
+            }
+            if let Some(note) = outcome.tally.normalisation_note(mode) {
+                println!("  {note}");
             }
             if outcome.legacy_was_empty {
                 println!(

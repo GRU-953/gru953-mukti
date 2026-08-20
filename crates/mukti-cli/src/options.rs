@@ -22,9 +22,17 @@ pub enum Mode {
     Check,
 }
 
-/// Three states, not a bool. "Say nothing but errors" and "say the usual
-/// amount" stopped being the only two things worth recording once guided
-/// mode's own conversational reporting became a third.
+/// Two states, and a note about why it is not three.
+///
+/// The rebuild plan called for a three-state `Verbosity`, the third being for
+/// guided mode's own conversational reporting. It was not built, because
+/// guided mode turned out not to need it: it calls `convert::convert_one`
+/// directly and prints in its own voice, so there is no flag-mode per-file
+/// output for it to suppress. A third variant would have had no reader.
+///
+/// This is still an enum rather than the `bool` it replaced, and that part of
+/// the plan stands: the old `quiet` bool was threaded through four separate
+/// function signatures, where a named state on `Options` is passed once.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum Verbosity {
     Quiet,

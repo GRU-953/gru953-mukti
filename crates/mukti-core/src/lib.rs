@@ -157,7 +157,46 @@ static CORRECTIONS: &[(&str, &str)] = &[
 ///
 /// Order is load-bearing: `CONVERSION_MAP` lists longer conjuncts before their
 /// own prefixes, so a hash map here would corrupt output.
+///
+/// # Why one `find` rather than `contains` then `replace`
+///
+/// The obvious spelling of this loop is `if out.contains(from) { out =
+/// out.replace(from, to) }`, and that is what it used to be. It scans the whole
+/// string **twice** for every rule that matches -- once to answer "is it in
+/// there?", then again from the beginning to do the work -- and profiling put
+/// this function at 23% of a real conversion, the single largest cost in the
+/// whole pipeline.
+///
+/// One `find` answers both questions at once: absent, and there is nothing to
+/// do; present, and its index is where the copying starts, so the prefix before
+/// it is copied in one block rather than re-examined character by character.
+/// The `replace` that follows operates on the remainder only.
+///
+/// This is not the Aho-Corasick automaton the plan also considered and did not
+/// build. That would fold all 191 rules into a single pass and is a genuine
+/// change of algorithm, with a genuine risk of changing output -- naive
+/// longest-match is provably wrong here, and getting the overlap resolution
+/// right needs its own proof. This keeps the algorithm exactly as it was,
+/// rule by rule, in the same order, and only stops reading the same bytes
+/// twice. The differential test below holds it to that.
 fn apply_map(input: &str, map: &[(&str, &str)]) -> String {
+    let mut out = input.to_owned();
+    for (from, to) in map {
+        if let Some(at) = out.find(from) {
+            let mut next = String::with_capacity(out.len());
+            next.push_str(&out[..at]);
+            next.push_str(to);
+            next.push_str(&out[at + from.len()..].replace(from, to));
+            out = next;
+        }
+    }
+    out
+}
+
+/// The previous implementation, kept so the change above can be proved rather
+/// than asserted. Test-only, and deliberately never called by anything else.
+#[cfg(test)]
+fn apply_map_reference(input: &str, map: &[(&str, &str)]) -> String {
     let mut out = input.to_owned();
     for (from, to) in map {
         if out.contains(from) {
@@ -794,8 +833,23 @@ fn reunite_split_vowels(s: &str) -> String {
 /// It composes the two-part vowels and then runs three repair passes, two of which
 /// DELETE characters. It is therefore not meaning-preserving and must not be used
 /// where only Unicode normalisation is wanted -- use [`compose_canonical_vowels`] for
-/// that. Nothing in the shipped path calls this; it is reached only through
-/// [`repair_unicode`], which is itself unused.
+/// that.
+///
+/// # This IS on the shipped path, and the correction matters
+///
+/// This comment used to end "Nothing in the shipped path calls this; it is
+/// reached only through [`repair_unicode`], which is itself unused." **That was
+/// false**, and it was the more dangerous kind of false: it invited a reader to
+/// treat the two deleting passes below as dead code. [`convert`] calls this
+/// function directly, on the output of `rearrange`, for every conversion this
+/// tool performs. So [`collapse_impossible_doubles`] and
+/// [`repair_mistyped_vowels`] both run on every word that converts.
+///
+/// That is defensible and deliberate -- both are narrow repairs for doubled
+/// keystrokes in the source typing, and each is documented where it is defined
+/// -- but it must be **stated**, because a deletion nobody knows about is
+/// exactly the mechanism that could hide the reordering faults this file
+/// records three times over. Corrected 20 August 2026.
 fn compose_two_part_vowels(s: &str) -> String {
     let s = s
         .replace("\u{09C7}\u{09BE}", "\u{09CB}") // ে + া -> ো
@@ -2098,6 +2152,58 @@ mod tests {
                 old, new,
                 "folded and reference implementations disagree on {case:?}"
             );
+        }
+    }
+
+    /// `apply_map`'s one-`find` form must agree with the `contains`-then-
+    /// `replace` form it replaced, on every real table and on the shapes most
+    /// likely to break it: a rule matching at the very start, at the very end,
+    /// several times over, overlapping itself, and not at all.
+    #[test]
+    fn differential_test_of_apply_map_against_its_reference() {
+        let tables: [(&str, &[(&str, &str)]); 4] = [
+            ("PRE_MAP", tables::PRE_MAP),
+            ("CONVERSION_MAP", tables::CONVERSION_MAP),
+            ("POST_MAP", tables::POST_MAP),
+            ("CORRECTIONS", super::CORRECTIONS),
+        ];
+
+        // Real legacy text, plus adversarial shapes. `aaa` against a rule
+        // keyed `aa` is the self-overlap case: whichever way the scan claims
+        // the first match, both implementations must claim it the same way.
+        let mut cases: Vec<String> = vec![
+            String::new(),
+            "Kg©m~wP".to_owned(),
+            "Awd†mi bvgt Kg©m~wP".to_owned(),
+            "plain English, untouched".to_owned(),
+            "এই অংশটি ইউনিকোডে আছে".to_owned(),
+            "aaa".to_owned(),
+            "aa".to_owned(),
+            "\u{00ff}".to_owned(),
+            "\u{00ff}\u{00ff}".to_owned(),
+            "x\u{00ff}".to_owned(),
+            "\u{00ff}x".to_owned(),
+        ];
+        // Every single key from every table, alone, doubled, and padded on
+        // both sides -- so a rule whose match sits at index 0, at the end, or
+        // twice over is covered for all 226 rules rather than a chosen few.
+        for (_, table) in tables {
+            for (from, _) in table {
+                cases.push((*from).to_owned());
+                cases.push(format!("{from}{from}"));
+                cases.push(format!("x{from}y"));
+            }
+        }
+
+        for (name, table) in tables {
+            for case in &cases {
+                let old = super::apply_map_reference(case, table);
+                let new = super::apply_map(case, table);
+                assert_eq!(
+                    old, new,
+                    "apply_map and its reference disagree on {name} for {case:?}"
+                );
+            }
         }
     }
 }

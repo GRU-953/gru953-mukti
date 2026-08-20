@@ -16,8 +16,11 @@
 //! this module uses extracts plain text only. It also means old formats carry no
 //! font information, so — unlike `.docx`, where a run in SutonnyMJ is known to
 //! be legacy before a single letter is examined — the decision here rests on the
-//! words alone, exactly as it does for a `.txt` file. Accuracy is the plain-text
-//! accuracy, not the higher font-gated accuracy quoted for `.docx`.
+//! words alone. These three formats are now the only ones where it does: plain
+//! text conversion went with the six-format narrowing in 0.9.0, so this is the
+//! whole of the tool's fontless surface rather than one case among several.
+//! Accuracy is correspondingly the plain-text accuracy, not the higher
+//! font-gated accuracy quoted for `.docx`.
 //!
 //! The original file is never modified.
 

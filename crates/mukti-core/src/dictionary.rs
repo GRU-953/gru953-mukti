@@ -81,7 +81,24 @@ impl Dictionary {
             return false;
         }
         let lower = word.to_ascii_lowercase();
-        let bare = lower.trim_matches(|c: char| !c.is_ascii_lowercase());
+        self.contains_english_bare(lower.trim_matches(|c: char| !c.is_ascii_lowercase()))
+    }
+
+    /// The same lookup, for a caller that has already lower-cased and trimmed.
+    ///
+    /// Exists so the hot path in `classify` does not lower-case the same word
+    /// twice -- once for its own guard list, then again in here. The caller
+    /// trims with `!c.is_ascii_alphabetic()` where this trims with
+    /// `!c.is_ascii_lowercase()`, and on an already-lower-cased ASCII string
+    /// those two predicates cannot disagree: there is no uppercase left for
+    /// them to differ about. Both callers lower-case first, so the `bare` they
+    /// arrive at is the same string.
+    ///
+    /// `bare` must already be lower-case; handing this an unlowered word makes
+    /// it answer about a word nobody asked about, which is why the public
+    /// entry point above is the one to reach for unless the allocation is
+    /// measurably in the way.
+    pub fn contains_english_bare(&self, bare: &str) -> bool {
         bare.len() >= 2 && self.set.contains(bare)
     }
 

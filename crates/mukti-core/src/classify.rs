@@ -122,8 +122,15 @@ struct Features {
     has_unicode_bengali: bool,
     /// No letters and no Bijoy-range characters: digits, punctuation, symbols.
     is_inert: bool,
-    /// How many distinct Bijoy-range characters appear.
-    distinct_exotic: usize,
+    /// At least one Bijoy-range character appears.
+    has_exotic: bool,
+    /// At least TWO *distinct* Bijoy-range characters appear.
+    ///
+    /// Two booleans rather than a count on purpose: every rule below asks only
+    /// these two questions, and answering exactly them needs no allocation.
+    /// See `Features::of` for the full reasoning, including why the obvious
+    /// `[bool; 256]` replacement would have been wrong.
+    two_distinct_exotic: bool,
     /// Share of the word's characters that are Bijoy-range.
     exotic_ratio: f32,
     /// What the word becomes if converted.
@@ -183,15 +190,36 @@ impl Features {
             .chars()
             .any(|c| c.is_alphanumeric() || is_bijoy_range(c));
 
-        let mut seen: Vec<char> = Vec::new();
+        // Two booleans rather than a count, and that is a deliberate narrowing
+        // of what this function offers.
+        //
+        // Every rule below asks only "is there at least one?" or "are there at
+        // least two?" -- never "how many?". Answering the exact question needed
+        // a heap `Vec<char>` with a linear `contains` on every character of
+        // every word; answering only the two questions actually asked needs one
+        // `Option<char>` and one flag, and cannot allocate at all.
+        //
+        // The plan that called for this suggested a stack `[bool; 256]` as the
+        // exact replacement. That would have been WRONG: `is_bijoy_range`
+        // admits U+2010..=U+20FF as well as the Latin-1 block, so 256 entries
+        // do not cover the range and a word's exotic characters could collide
+        // in the array. Two booleans sidestep the question entirely.
+        //
+        // A future rule wanting `>= 3` cannot be written against a bool by
+        // accident -- whoever needs it has to add a real counter and think
+        // about the cost again, which is the point.
         let mut exotic = 0usize;
         let mut considered = 0usize;
+        let mut first_exotic: Option<char> = None;
+        let mut two_distinct_exotic = false;
         for c in word.chars() {
             considered += 1;
             if is_bijoy_range(c) {
                 exotic += 1;
-                if !seen.contains(&c) {
-                    seen.push(c);
+                match first_exotic {
+                    None => first_exotic = Some(c),
+                    Some(first) if first != c => two_distinct_exotic = true,
+                    Some(_) => {}
                 }
             }
         }
@@ -205,8 +233,15 @@ impl Features {
         // the short guard adds the modern office vocabulary a 1934 dictionary
         // could not have — email, website, dataset — which is exactly the
         // register these documents are written in.
-        let lower = word.to_ascii_lowercase();
-        let bare = lower.trim_matches(|c: char| !c.is_ascii_alphabetic());
+        //
+        // The lower-casing this needs used to happen HERE, unconditionally, for
+        // every word -- and then a second time inside `contains_english`, which
+        // lower-cases whatever it is handed. Two allocations per word, on the
+        // path most words take. Both are now inside the branch that reads them,
+        // and the second is gone: `contains_english_bare` takes the string this
+        // branch has already prepared. See that method for why the two spellings
+        // of the trim predicate are equivalent here.
+        //
         // The raw word must be ASCII, and the big dictionary is asked about the
         // raw word — both deliberately, both measured.
         //
@@ -268,8 +303,16 @@ impl Features {
                 >= 4;
         let is_english = if without_typography.len() == word.len() {
             // No typography was trimmed: the original behaviour, unchanged.
-            word.is_ascii()
-                && (ENGLISH_GUARD.contains(&bare) || Dictionary::english().contains_english(word))
+            // Restructured only so the lower-casing happens after the `is_ascii`
+            // gate rather than before it -- identical result, since the gate
+            // short-circuited the whole expression anyway.
+            if !word.is_ascii() {
+                false
+            } else {
+                let lower = word.to_ascii_lowercase();
+                let bare = lower.trim_matches(|c: char| !c.is_ascii_alphabetic());
+                ENGLISH_GUARD.contains(&bare) || Dictionary::english().contains_english_bare(bare)
+            }
         } else {
             typography_core_is_long_enough
                 && Dictionary::english().contains_english(without_typography)
@@ -314,7 +357,8 @@ impl Features {
             alphanumeric: word.chars().filter(|c| c.is_alphanumeric()).count(),
             has_unicode_bengali,
             is_inert,
-            distinct_exotic: seen.len(),
+            has_exotic: first_exotic.is_some(),
+            two_distinct_exotic,
             exotic_ratio,
             converted_is_word,
             converted_plausible,
@@ -370,7 +414,7 @@ fn verdict_from_features(f: &Features) -> Verdict {
 
     // The strong signal: a Bijoy-range character AND a conversion that is a
     // real Bengali word. Noise does not clear both.
-    if f.converted_is_word && f.distinct_exotic >= 1 {
+    if f.converted_is_word && f.has_exotic {
         return Verdict::Legacy;
     }
 
@@ -382,7 +426,7 @@ fn verdict_from_features(f: &Features) -> Verdict {
     // reverted: it bought 0.27% recall and cost a twentyfold rise in false
     // positives on digits and punctuation (0.040% -> 0.797%), breaking the
     // aggregate gate. The bar stays where the measurement put it.
-    if f.exotic_ratio >= 0.10 && f.distinct_exotic >= 2 && f.converted_plausible {
+    if f.exotic_ratio >= 0.10 && f.two_distinct_exotic && f.converted_plausible {
         return Verdict::Legacy;
     }
 
@@ -402,7 +446,7 @@ fn verdict_from_features(f: &Features) -> Verdict {
 
     // A single Bijoy-range character and a possible conversion. Weak on its
     // own; context may yet carry it.
-    if f.distinct_exotic >= 1 && f.converted_plausible {
+    if f.has_exotic && f.converted_plausible {
         return Verdict::Uncertain;
     }
 
@@ -434,16 +478,16 @@ pub fn diagnose_alone(word: &str, dictionary: &Dictionary) -> &'static str {
     if f.has_sub_or_superscript {
         return "hard_stop_sub_or_superscript";
     }
-    if f.converted_is_word && f.distinct_exotic >= 1 {
+    if f.converted_is_word && f.has_exotic {
         return "legacy_byte_and_dictionary";
     }
-    if f.exotic_ratio >= 0.10 && f.distinct_exotic >= 2 && f.converted_plausible {
+    if f.exotic_ratio >= 0.10 && f.two_distinct_exotic && f.converted_plausible {
         return "legacy_density";
     }
     if f.converted_is_word && f.alphanumeric >= 2 {
         return "uncertain_dictionary_word";
     }
-    if f.distinct_exotic >= 1 && f.converted_plausible {
+    if f.has_exotic && f.converted_plausible {
         return "uncertain_plausible";
     }
     if f.converted_is_word {

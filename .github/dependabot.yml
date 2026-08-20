@@ -33,15 +33,21 @@ updates:
     commit-message:
       prefix: "deps"
     groups:
+      # The crates that parse a file somebody else gave you, kept in their own
+      # group so a fix in one is never buried under a routine bump of something
+      # that only ever sees our own data. `lopdf` was the fourth name here until
+      # 0.9.0 removed PDF support along with it -- and it was the one that
+      # actually carried a vulnerability (RUSTSEC-2026-0187), which is the whole
+      # argument for this group existing.
       file-parsers:
         patterns:
-          - "lopdf"
           - "quick-xml"
           - "zip"
+          - "office_oxide"
       rest:
         patterns:
           - "*"
         exclude-patterns:
-          - "lopdf"
           - "quick-xml"
           - "zip"
+          - "office_oxide"

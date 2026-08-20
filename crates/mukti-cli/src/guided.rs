@@ -42,6 +42,9 @@ pub trait World {
     fn list_dir(&self, dir: &Path) -> Vec<PathBuf>;
     fn create_dir_all(&self, dir: &Path) -> std::io::Result<()>;
     fn exists(&self, path: &Path) -> bool;
+    /// The wall clock, behind the trait like everything else, so a scripted
+    /// conversation gets a fixed date rather than today's.
+    fn now(&self) -> std::time::SystemTime;
     fn convert_one(&self, path: &Path, mode: Mode, opts: &Options) -> Result<Outcome, String>;
 }
 
@@ -89,6 +92,10 @@ impl World for RealWorld {
 
     fn exists(&self, path: &Path) -> bool {
         path.exists()
+    }
+
+    fn now(&self) -> std::time::SystemTime {
+        std::time::SystemTime::now()
     }
 
     fn convert_one(&self, path: &Path, mode: Mode, opts: &Options) -> Result<Outcome, String> {
@@ -363,6 +370,11 @@ fn run_batch(
     } else {
         done(output, palette, &tally.describe(Mode::Convert));
     }
+    // The one edit Mukti makes to text it otherwise leaves alone, reported
+    // whether or not anything failed -- it happened either way.
+    if let Some(text) = tally.normalisation_note(Mode::Convert) {
+        note(output, palette, &text);
+    }
     GuidedOutcome::Ran(RunResult {
         total: tally,
         any_failed,
@@ -385,6 +397,14 @@ pub fn converse(
     };
 
     if world.is_file(&target) {
+        // A file Mukti cannot open is said so directly, here, rather than
+        // offered and then refused a moment later. Being asked "convert this?",
+        // answering yes, and only then being told it was never possible is a
+        // worse conversation than being told at the point the answer is known.
+        if !convert::is_supported(&target) {
+            error_line(output, palette, &convert::refusal_for(&target));
+            return GuidedOutcome::Stopped;
+        }
         say(output, &words::given_a_file_offer_to_convert_it(&target));
         return match ask_yes_no(input, output, palette, &words::confirm_bare_file(&target)) {
             Answer::Yes => run_batch(output, world, opts, palette, vec![target]),
@@ -450,9 +470,26 @@ pub fn converse(
     let mut opts = opts.clone();
     match ask_output_location(input, output, palette) {
         OutputChoice::NewFolder => {
-            let folder = target.join("mukti-converted");
-            let _ = world.create_dir_all(&folder);
-            opts.output_folder = Some(folder);
+            // Dated, so converting the same folder again next week lands
+            // somewhere new instead of colliding with the earlier run -- and
+            // so a reader looking at two of these can tell which is which.
+            // `world.now()` rather than the clock directly, so the test can
+            // pin the date.
+            let folder = target.join(format!(
+                "mukti-converted-{}",
+                report::date_stamp(world.now())
+            ));
+            match world.create_dir_all(&folder) {
+                Ok(()) => opts.output_folder = Some(folder),
+                Err(e) => {
+                    error_line(
+                        output,
+                        palette,
+                        &words::could_not_make_folder(&folder, e.kind()),
+                    );
+                    return GuidedOutcome::Stopped;
+                }
+            }
         }
         OutputChoice::Beside => {
             let clashing = discovery
@@ -598,6 +635,11 @@ mod tests {
         fn exists(&self, path: &Path) -> bool {
             self.existing_outputs.contains(&path.to_path_buf())
         }
+        fn now(&self) -> std::time::SystemTime {
+            // Fixed, so the dated output folder has one right answer.
+            // 1787184000 = 2026-08-20, cross-checked independently.
+            std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_787_184_000)
+        }
         fn convert_one(
             &self,
             path: &Path,
@@ -612,6 +654,7 @@ mod tests {
                 tally: Tally {
                     converted: 1,
                     untouched: 0,
+                    normalised: 0,
                 },
                 destination: Some(path.with_extension("unicode.docx")),
                 fonts_changed: Some(1),
@@ -626,6 +669,43 @@ mod tests {
         let mut output: Vec<u8> = Vec::new();
         let outcome = converse(&mut input, &mut output, world, &Options::default(), None);
         (outcome, String::from_utf8(output).unwrap())
+    }
+
+    /// The whole happy path, written out, so any change to any word in it is
+    /// a diff a reviewer sees rather than a surprise a reader gets.
+    ///
+    /// Two things about how this reads. The prompts have no line break after
+    /// them: on a real terminal the reader's own Return supplies it, and this
+    /// scripted input cannot echo. And the progress line is carriage-returned
+    /// so it overwrites itself in place, which a captured transcript cannot
+    /// show -- `\r` is rendered here as `[CR]` so the assertion covers it
+    /// rather than hiding it.
+    #[test]
+    fn the_happy_path_reads_exactly_like_this() {
+        let world =
+            FakeWorld::new().with_listing("/home/example/docs", &["report.docx", "notes.doc"]);
+        let (outcome, transcript) = run_conversation(&world, "\n2\ny\n");
+
+        assert!(matches!(outcome, GuidedOutcome::Ran(_)));
+        let shown = transcript.replace('\r', "[CR]");
+        let expected = "\
+Mukti by GRU953
+Converts old Bangla writing in Office files to Unicode.
+Simple technology. For everyone.
+
+Which folder has the files to convert? Press Return to use the current folder, \
+or type q to stop. Note: Found 1 .docx, 1 .doc.
+Where should the converted files go? Type 1 for a new folder next to this one, \
+or 2 to save each file beside its original. About to convert 2 files. Nothing \
+changes until this is confirmed. Continue? [y/n] \
+[CR][1/2] /home/example/docs/report.docx[CR][2/2] /home/example/docs/notes.doc
+Done. 2 of 2 words converted; 0 left exactly as they were.
+";
+        assert_eq!(
+            shown, expected,
+            "the guided conversation's wording changed -- read the diff and \
+             confirm it is an improvement before updating this test"
+        );
     }
 
     #[test]
@@ -721,7 +801,9 @@ mod tests {
         assert!(matches!(outcome, GuidedOutcome::Ran(_)));
         assert_eq!(
             world.created_dirs.borrow().as_slice(),
-            [PathBuf::from("/home/example/docs/mukti-converted")]
+            [PathBuf::from(
+                "/home/example/docs/mukti-converted-2026-08-20"
+            )]
         );
     }
 

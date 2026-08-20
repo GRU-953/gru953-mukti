@@ -88,7 +88,7 @@ Then:
 cargo test --workspace
 ```
 
-229 tests, all passing. Then the command-line tool:
+240 tests, all passing. Then the command-line tool:
 
 ```bash
 cargo run -p mukti-cli -- check <file>

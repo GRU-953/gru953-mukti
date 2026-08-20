@@ -3,11 +3,17 @@
 #
 # `RUSTFLAGS` in the environment silently OVERRIDES this file rather than
 # merging with it. Until 20 August 2026 the warning-as-error flag was set as
-# an environment variable in two places -- CI and the local sandbox -- but
-# NOT in the release workflow, so the one build that ships was also the one
-# build that did not fail on a warning. Consolidated here instead, with both
-# environment exports removed, so there is exactly one place this is decided
-# and every build sees the same thing.
+# an environment variable in THREE places -- `ci.yml`, `.sandbox/activate` and
+# `.claude/settings.json` -- but NOT in the release workflow, so the one build
+# that ships was also the one build that did not fail on a warning.
+#
+# All three exports are now removed and this file is the only place it is set.
+# The third took a second pass to find: two were removed when this file was
+# written, and `.claude/settings.json` kept quietly overriding it for another
+# few hours, which is a neat demonstration of exactly why the override is
+# worth a comment this long. The `check` job in `ci.yml` now fails if
+# `RUSTFLAGS` is set in the environment at all, so a fourth cannot appear
+# unnoticed.
 #
 # `target-cpu` was considered and NOT adopted, on measurement rather than on
 # guesswork: `-C target-cpu=apple-m4` adds exactly three instruction-set

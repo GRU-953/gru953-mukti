@@ -1,6 +1,5 @@
 {
   "env": {
-    "RUSTFLAGS": "-D warnings",
     "CARGO_TERM_COLOR": "always"
   },
   "permissions": {
@@ -28,6 +27,7 @@
       "Bash(git fetch:*)",
       "Bash(git fsck:*)",
       "Bash(git for-each-ref:*)",
+      "Bash(git push:*)",
       "Bash(gh run list:*)",
       "Bash(gh run view:*)",
       "Bash(gh release list:*)",

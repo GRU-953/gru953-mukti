@@ -338,7 +338,7 @@ rules, and two dictionaries built into the binary: 451,348 Bangla words and
 ## Build it yourself
 
 ```sh
-cargo test --workspace     # 229 tests, no network needed
+cargo test --workspace     # 240 tests, no network needed
 cargo run -p mukti-cli    # the command-line tool
 ```
 

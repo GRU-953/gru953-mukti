@@ -1,6 +1,22 @@
-//! Read a legacy Bangla text file, whatever it was saved as.
+//! Decide whether a run of bytes is UTF-8 or Windows-1252, and decode it.
 //!
-//! # Why this is needed at all
+//! # Nothing the `mukti` command does reaches this module
+//!
+//! **This is not on the shipped path, and that sentence is a fact rather than an
+//! aspiration.** Version 0.9.0 narrowed the tool to six Office formats, all of
+//! which are Zip archives holding XML that declares its own encoding, so the
+//! guess this module makes is one the converter no longer has to make. `.txt`,
+//! `.csv` and `.md` are refused by the six-format gate in `mukti-cli` before a
+//! byte is read.
+//!
+//! It is kept, deliberately, for one caller: `devtools/corpus-verify` uses
+//! [`decode`] to read the English-only negative corpus — 311 Markdown files, 66
+//! notebooks and 8 Python files that must come through a conversion completely
+//! untouched. A single converted word in there is a false positive and a real
+//! defect, which makes that check one of this project's better safety nets, and
+//! it needs to read those files as text to run at all.
+//!
+//! # Why the guess is needed where it IS still made
 //!
 //! A Bijoy document saved as plain text is almost never UTF-8. It was typed on
 //! Windows, so it is **Windows-1252**, and the glyphs Bijoy leans on live in
@@ -13,10 +29,11 @@
 //! | `0xA9` | `©` | reph |
 //! | `0x93` | `“` | part of a conjunct |
 //!
-//! Read those bytes as UTF-8 and the file either fails to decode outright or
-//! comes back as replacement characters. Either way the text is gone before
-//! the converter ever sees it, and the user is told their perfectly good file
-//! is "not valid text".
+//! Read those bytes as UTF-8 and they either fail to decode outright or come
+//! back as replacement characters — and text that has become replacement
+//! characters cannot be checked for having been wrongly converted, because the
+//! damage the check is looking for is no longer distinguishable from the damage
+//! the decode did.
 //!
 //! # How the choice is made
 //!

@@ -32,6 +32,21 @@ fn show(path: &Path) -> String {
     crate::report::show_path(path)
 }
 
+/// "1 file", "12 files" -- never "file(s)".
+///
+/// The bracketed form is quicker to write and reads as a form to fill in
+/// rather than a sentence, which is the opposite of what a beginner-facing
+/// tool wants. Every noun this is used with pluralises regularly, so one
+/// helper covers all of them; anything irregular must not be routed here.
+fn counted(n: usize, noun: &str) -> String {
+    let n_text = crate::report::group_thousands(n);
+    if n == 1 {
+        format!("{n_text} {noun}")
+    } else {
+        format!("{n_text} {noun}s")
+    }
+}
+
 /// The wordmark, first mention. "GRU953 Mukti" is never used again once this
 /// landed — the prefix form is reserved by the brand's own rule for a name
 /// too generic to stand alone, and "Mukti" is not that.
@@ -304,6 +319,40 @@ pub fn across_files_summary(file_count: usize, tally_description: &str) -> Strin
     format!("Across {file_count} files: {tally_description}")
 }
 
+/// How many words changed and how many did not. Lives here rather than beside
+/// the arithmetic in `report` so the brand tests below sweep it like every
+/// other sentence a reader sees.
+pub fn tally_sentence(converted: usize, total: usize, untouched: usize, checking: bool) -> String {
+    let verb = if checking {
+        "would be converted"
+    } else {
+        "converted"
+    };
+    format!(
+        "{} of {} words {verb}; {} left exactly as they were.",
+        crate::report::group_thousands(converted),
+        crate::report::group_thousands(total),
+        crate::report::group_thousands(untouched)
+    )
+}
+
+/// The one edit Mukti makes to text it otherwise leaves alone, said out loud.
+///
+/// Where a vowel sign was stored in two pieces, the two are joined into the
+/// single character Unicode defines them as. It looks identical either way, so
+/// without this line the change is invisible — and an invisible edit to text
+/// the tool promises not to touch is worth a sentence even though it cannot
+/// alter what the text says.
+pub fn normalisation_note(count: usize, checking: bool) -> String {
+    let verb = if checking { "would be" } else { "were" };
+    format!(
+        "{} Bangla words already in Unicode {verb} tidied. A vowel sign stored \
+         in two pieces is joined into one character, so a search can find the \
+         word. The words read the same.",
+        crate::report::group_thousands(count)
+    )
+}
+
 // ---------------------------------------------------------------------
 // Status markers
 // ---------------------------------------------------------------------
@@ -356,16 +405,18 @@ pub fn nothing_found(folder: &Path) -> String {
 
 pub fn only_mukti_output_found(count: usize) -> String {
     format!(
-        "The {count} matching file(s) here already look like Mukti's own \
-         earlier output. There is nothing left to convert."
+        "{} here already {} like Mukti's own earlier output. There is nothing \
+         left to convert.",
+        counted(count, "matching file"),
+        if count == 1 { "looks" } else { "look" }
     )
 }
 
 pub fn matches_only_in_subfolders(subfolder_count: usize) -> String {
     format!(
-        "Nothing here directly, though this folder holds {subfolder_count} \
-         other folder(s) Mukti did not look inside. Run mukti again and \
-         name one of them, if the files are there."
+        "Nothing here directly, though this folder holds {} Mukti did not look \
+         inside. Run mukti again and name one of them, if the files are there.",
+        counted(subfolder_count, "other folder")
     )
 }
 
@@ -380,15 +431,19 @@ pub fn discovery_report(by_type: &[(&str, usize)]) -> String {
 
 pub fn subfolders_excluded_note(count: usize) -> String {
     format!(
-        "{count} sub-folder(s) here were not looked inside. Run mukti again \
-         and name one directly to convert what is in it."
+        "{} here {} not looked inside. Run mukti again and name one directly to \
+         convert what is in it.",
+        counted(count, "sub-folder"),
+        if count == 1 { "was" } else { "were" }
     )
 }
 
 pub fn skipped_note(count: usize) -> String {
     format!(
-        "{count} file(s) were left out because they look like Mukti's own \
-         earlier output."
+        "{} {} left out because {} like Mukti's own earlier output.",
+        counted(count, "file"),
+        if count == 1 { "was" } else { "were" },
+        if count == 1 { "it looks" } else { "they look" }
     )
 }
 
@@ -400,8 +455,8 @@ pub fn ask_output_location() -> String {
 
 pub fn confirm_conversion(file_count: usize) -> String {
     format!(
-        "About to convert {file_count} file(s). Nothing changes until this \
-         is confirmed. Continue?"
+        "About to convert {}. Nothing changes until this is confirmed. Continue?",
+        counted(file_count, "file")
     )
 }
 
@@ -420,6 +475,21 @@ pub fn gave_up_after_unclear_answers() -> String {
     "That answer was not one Mukti recognised, three times running, so \
      nothing was changed. Run mukti again when ready."
         .to_owned()
+}
+
+pub fn could_not_make_folder(folder: &Path, kind: std::io::ErrorKind) -> String {
+    use std::io::ErrorKind;
+    let name = show(folder);
+    match kind {
+        ErrorKind::PermissionDenied => format!(
+            "Your computer would not let Mukti make the folder {name}. Nothing \
+             was changed. Save the files beside the originals instead."
+        ),
+        _ => format!(
+            "The folder {name} could not be made, so nothing was changed. Save \
+             the files beside the originals instead."
+        ),
+    }
 }
 
 pub fn not_y_or_n() -> String {
@@ -492,6 +562,10 @@ mod tests {
             no_verb_with_files(p),
             verb_with_no_files("convert"),
             across_files_summary(7, "3 of 10 words converted; 7 left exactly as they were."),
+            tally_sentence(1234, 1240, 6, false),
+            tally_sentence(1234, 1240, 6, true),
+            normalisation_note(9904, false),
+            normalisation_note(9904, true),
             ask_folder(),
             folder_not_found(p),
             given_a_file_offer_to_convert_it(p),
@@ -511,6 +585,8 @@ mod tests {
             confirm_bare_file(p),
             not_y_or_n(),
             not_one_or_two(),
+            could_not_make_folder(Path::new("out"), std::io::ErrorKind::PermissionDenied),
+            could_not_make_folder(Path::new("out"), std::io::ErrorKind::Other),
         ]
     }
 
@@ -667,6 +743,14 @@ mod tests {
             ("out_with_several_files", out_with_several_files(7)),
             ("unknown_option", unknown_option("--recursive")),
             ("bad_theme_value", bad_theme_value()),
+            (
+                "could_not_make_folder/PermissionDenied",
+                could_not_make_folder(Path::new("out"), std::io::ErrorKind::PermissionDenied),
+            ),
+            (
+                "could_not_make_folder/Other",
+                could_not_make_folder(Path::new("out"), std::io::ErrorKind::Other),
+            ),
             ("no_verb_with_files", no_verb_with_files(p)),
             ("verb_with_no_files", verb_with_no_files("convert")),
         ];

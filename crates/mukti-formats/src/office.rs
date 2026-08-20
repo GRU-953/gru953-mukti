@@ -634,10 +634,21 @@ pub struct Summary {
 /// Legacy Bangla font names, lower-cased.
 ///
 /// Public so that anything checking "did a legacy font survive the conversion?"
-/// asks **this** list rather than keeping its own copy. There are already two
-/// other font lists in the workspace (`pdf.rs` and `corpus-label`) that drifted
-/// apart; a verifier with a fourth would be able to pass while the converter
-/// failed, which is worse than having no verifier.
+/// asks **this** list rather than keeping its own copy.
+///
+/// **This is now the only such list in the workspace, and it took two separate
+/// incidents to get there.** There were three. `pdf.rs` kept a stricter one
+/// until PDF support was removed in 0.9.0. `devtools/corpus-label` kept its own
+/// by hand until 20 August 2026, when it was found to have drifted far enough to
+/// corrupt the accuracy figures themselves: it classed `SutonnyOMJ` as legacy,
+/// which the evidence in `NEVER_LEGACY` below flatly contradicts, and so
+/// excluded real false positives from ever being measured. It now calls
+/// [`is_legacy_font`] instead of keeping a copy.
+///
+/// The lesson both times was the same, and it is the reason this doc comment
+/// exists: a measurement tool holding its own copy of the converter's rules can
+/// pass while the converter fails, which is worse than having no measurement at
+/// all. Anything that needs this list must ask for it.
 pub const LEGACY_FONTS: &[&str] = &[
     // The family prefix, not the three exact names. Listing only `sutonnymj`,
     // `sutonnyomj` and `sutonnyemj` silently missed every other variant in the
@@ -700,10 +711,13 @@ pub const LEGACY_FONTS: &[&str] = &[
     // These two are redundant against `mj` for every family in the vendor
     // collection, and kept anyway on the same rule as `boishakhi` and
     // `bornosoft` above: removing a legacy font on no evidence is the same
-    // mistake as adding one. They arrived with a stricter list the PDF reader
-    // once kept (removed in 0.9.0, along with PDF support itself), and
-    // `is_exactly_legacy_font` below compares by equality, so a font named
-    // plainly `Sutonny` or `Chandrabati`, with no `MJ`, is still matched here.
+    // mistake as adding one.
+    //
+    // The reason they must stay is live and testable, and does not depend on
+    // where they came from: `is_exactly_legacy_font` below compares by
+    // EQUALITY, not substring, and drives the `docProps/app.xml` rewrite. Drop
+    // either entry and a font named plainly `Sutonny` or `Chandrabati`, with no
+    // `MJ`, stops being renamed in the document's own "Fonts Used" list.
     "sutonny",
     "chandrabati",
     // REMOVED on evidence: `adorsholipi`, `nikoshban` and `ekushey` name

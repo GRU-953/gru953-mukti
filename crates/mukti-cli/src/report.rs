@@ -14,26 +14,79 @@ use crate::options::Mode;
 pub struct Tally {
     pub converted: usize,
     pub untouched: usize,
+    /// Words that were already Unicode Bengali and had a two-part vowel sign
+    /// joined into the single character Unicode says it is.
+    ///
+    /// Counted apart from `converted` because it is not a conversion — no
+    /// legacy text was involved. It has been computed since 0.7.0 and printed
+    /// nowhere, which meant the one edit Mukti makes to text it otherwise
+    /// promises to leave alone happened silently. It is reported now.
+    pub normalised: usize,
 }
 
 impl Tally {
     pub fn add(&mut self, other: Tally) {
         self.converted += other.converted;
         self.untouched += other.untouched;
+        self.normalised += other.normalised;
     }
 
     pub fn describe(&self, mode: Mode) -> String {
-        let verb = match mode {
-            Mode::Convert => "converted",
-            Mode::Check => "would be converted",
-        };
-        format!(
-            "{} of {} words {verb}; {} left exactly as they were.",
-            group_thousands(self.converted),
-            group_thousands(self.converted + self.untouched),
-            group_thousands(self.untouched)
+        crate::words::tally_sentence(
+            self.converted,
+            self.converted + self.untouched,
+            self.untouched,
+            mode == Mode::Check,
         )
     }
+
+    /// The extra line about joined vowel signs, or `None` when there were
+    /// none — which is the common case, and printing "0 words" every time
+    /// would bury the line that matters.
+    pub fn normalisation_note(&self, mode: Mode) -> Option<String> {
+        if self.normalised == 0 {
+            return None;
+        }
+        Some(crate::words::normalisation_note(
+            self.normalised,
+            mode == Mode::Check,
+        ))
+    }
+}
+
+/// Today's date as `YYYY-MM-DD`, from a `SystemTime`.
+///
+/// Hand-rolled, and that is the interesting part: 0.9.0 removed three separate
+/// date/time crates (`chrono`, `jiff`, `time`) along with the PDF reader that
+/// dragged them in, and putting one back to name a folder would undo a good
+/// chunk of that. `SystemTime` is std, and the civil-date arithmetic below is
+/// Howard Hinnant's `civil_from_days`, which is exact for every date in the
+/// proleptic Gregorian calendar and needs no table.
+///
+/// UTC, deliberately, with no attempt at a local timezone: std cannot read one
+/// without a dependency, and a folder named a few hours off is a smaller
+/// problem than a wrong dependency or a guess presented as local time.
+pub fn date_stamp(now: std::time::SystemTime) -> String {
+    let secs = now
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let days = secs.div_euclid(86_400);
+
+    // Shift the epoch to 1 March 0000 so a leap day lands at the END of the
+    // year being counted, which is what removes every special case.
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let doe = z.rem_euclid(146_097); // day of era, 0..=146096
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365; // 0..=399
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100); // 0..=365, from 1 March
+    let mp = (5 * doy + 2) / 153; // 0..=11, March-based month
+    let d = doy - (153 * mp + 2) / 5 + 1; // 1..=31
+    let m = if mp < 10 { mp + 3 } else { mp - 9 }; // 1..=12
+    let y = if m <= 2 { y + 1 } else { y };
+
+    format!("{y:04}-{m:02}-{d:02}")
 }
 
 /// `12345` becomes `"12,345"`. Latin numerals throughout, per the brand's
@@ -167,6 +220,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn date_stamp_matches_known_dates() {
+        use std::time::{Duration, UNIX_EPOCH};
+        let at = |secs: u64| date_stamp(UNIX_EPOCH + Duration::from_secs(secs));
+        assert_eq!(at(0), "1970-01-01");
+        assert_eq!(at(86_399), "1970-01-01", "the last second of the day");
+        assert_eq!(at(86_400), "1970-01-02");
+        // A leap day, and the day after it, in a year divisible by 4.
+        assert_eq!(at(1_709_164_800), "2024-02-29");
+        assert_eq!(at(1_709_251_200), "2024-03-01");
+        // 2000 was a leap year (divisible by 400); 1900 was not. Both are the
+        // cases a naive rule gets wrong.
+        assert_eq!(at(951_782_400), "2000-02-29");
+        // The date this was written, as a plain sanity anchor. Every value in
+        // this test was cross-checked against an independent implementation
+        // rather than against the function under test -- this anchor was a day
+        // out on the first attempt, and only that cross-check caught it.
+        assert_eq!(at(1_787_184_000), "2026-08-20");
+        assert_eq!(at(1_787_270_400), "2026-08-21");
+    }
+
+    #[test]
+    fn date_stamp_is_sortable_and_fixed_width() {
+        use std::time::{Duration, UNIX_EPOCH};
+        let mut previous = String::new();
+        // One sample a week for twenty years: the string form must sort in the
+        // same order as the instants, which is the only property the folder
+        // name actually relies on.
+        for week in 0..(52 * 20) {
+            let s = date_stamp(UNIX_EPOCH + Duration::from_secs(week * 7 * 86_400));
+            assert_eq!(s.len(), 10, "{s} is not YYYY-MM-DD");
+            assert!(s > previous, "{s} does not sort after {previous}");
+            previous = s;
+        }
+    }
+
+    #[test]
     fn group_thousands_places_commas_correctly() {
         assert_eq!(group_thousands(0), "0");
         assert_eq!(group_thousands(7), "7");
@@ -181,6 +270,7 @@ mod tests {
         let t = Tally {
             converted: 1234,
             untouched: 6,
+            normalised: 0,
         };
         assert_eq!(
             t.describe(Mode::Convert),
@@ -198,16 +288,19 @@ mod tests {
         total.add(Tally {
             converted: 3,
             untouched: 7,
+            normalised: 2,
         });
         total.add(Tally {
             converted: 2,
             untouched: 1,
+            normalised: 5,
         });
         assert_eq!(
             total,
             Tally {
                 converted: 5,
-                untouched: 8
+                untouched: 8,
+                normalised: 7
             }
         );
     }

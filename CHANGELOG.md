@@ -126,14 +126,37 @@ landed. The combined result, compared against the pre-Part-3 baseline:
 **1,614 identical, 0 differing, 0 vanished, 0 new, across 1,775 files** — the
 whole of this section changes nothing about what any document converts to.
 
+- **`apply_map` reads each string once per rule instead of twice.** It was
+  `if out.contains(from) { out = out.replace(from, to) }` — a full scan to
+  answer "is it in there?", then a second scan from the beginning to do the
+  work. One `find` answers both at once and gives the index to start copying
+  from. Profiling had put this single function at 23% of a real conversion,
+  the largest cost in the pipeline. The algorithm is untouched: same rules,
+  same order, one at a time. A differential test holds it to that, checking
+  the new form against the old one across **all 226 rules** in the four real
+  tables, each rule's key alone, doubled, and padded on both sides, plus the
+  self-overlap case a naive rewrite would get wrong.
+- **Three allocations per word removed from the classifier.** Every word
+  lower-cased itself before the ASCII gate that would have short-circuited
+  the whole expression, and then `contains_english` lower-cased the same word
+  a second time; both are now inside the branch that reads them, and the
+  duplicate is gone. The distinct-character count kept a heap `Vec<char>`
+  with a linear `contains` per character, where every rule that consults it
+  asks only "at least one?" or "at least two?" — it is now two booleans and
+  allocates nothing. **The plan's own suggestion here was wrong and was not
+  followed:** it called for a stack `[bool; 256]` as the exact replacement,
+  but the character range in question spans U+2010..=U+20FF as well as
+  Latin-1, so 256 entries would not have covered it and distinct characters
+  could have collided in the array.
+
 Two further items from the original plan were assessed and **not** pursued
-this round: the `apply_map` substring-search automaton (highest measured
-single cost in the profile, but the population it runs against had already
-shrunk sharply once the classifier stopped converting words twice, and
-further static analysis after these changes should confirm whether it is
-still on the critical path before it is attempted); and parallelism across
-files, deferred to the CLI rebuild that will restructure the exact file it
-would touch, so it is built once in its final home rather than twice.
+this round: the `apply_map` **automaton** — the Aho–Corasick rewrite that
+folds all 191 rules into a single pass, which is a genuine change of
+algorithm with a genuine risk of changing output, unlike the one-`find`
+change above; and threading two reusable `String` buffers through
+`convert()`'s seven stages, which touches every stage at once and wants the
+full corpus gate rather than a differential test. Parallelism across files
+was deferred to the CLI rebuild below, and landed there.
 
 ### Fixed
 
@@ -287,18 +310,79 @@ burying: a portability break in `gru953-mukti` or `mukti-formats`, both
 ordinary Rust with nothing macOS-specific in them, would now go unnoticed
 here rather than failing on the platform it broke.
 
+### Fixed on a verification pass over this whole release
+
+Everything above was audited against the plan it came from once it was
+written, which found ten things worth correcting. They are listed because
+several are the kind that would otherwise have quietly stayed wrong.
+
+- **A comment that lied about the code, in the place it mattered most.**
+  `compose_two_part_vowels` carried "Nothing in the shipped path calls this;
+  it is reached only through `repair_unicode`, which is itself unused." The
+  first half was false: `convert` calls it directly, on every conversion, so
+  the two **deleting** repair passes inside it run on every word this tool
+  converts. The code is defensible and each pass is documented where it is
+  defined — but a deletion nobody knows about is exactly the mechanism that
+  could hide the reordering faults this project has recorded three times, and
+  the comment invited a reader to treat it as dead code.
+- **`words_normalised` is finally printed.** It has been computed since 0.7.0
+  and shown nowhere, which meant the one edit Mukti makes to text it
+  otherwise promises to leave untouched — joining a two-piece vowel sign into
+  the single character Unicode defines it as — happened silently. Both flag
+  mode and guided mode now say so, and only when it actually happened.
+- **The output folder guided mode offers is dated**, `mukti-converted-2026-08-20`,
+  so converting the same folder next week does not collide with this week. The
+  date arithmetic is hand-rolled from `SystemTime` rather than reached for
+  from a crate: this release deleted three date/time libraries along with the
+  PDF reader that pulled them in, and putting one back to name a folder would
+  have undone much of that.
+- **`file(s)` and `folder(s)` are gone**, replaced by real agreement — "1 file",
+  "2 files". Found by writing the golden-screen test the plan asked for and
+  actually reading the transcript it captured, which is the entire argument
+  for having one.
+- **`RUSTFLAGS` was still set in a third place.** The consolidation into
+  `.cargo/config.toml` removed it from `ci.yml` and `.sandbox/activate` and
+  missed `.claude/settings.json`, which then went on silently overriding the
+  file that was supposed to be the single source of truth. A neat
+  demonstration of the hazard the consolidation existed to fix.
+- `encoding.rs`'s module doc still argued entirely about reading `.txt` files
+  and still claimed a user could be shown an error that is now unreachable.
+  Rewritten to say what is true: nothing the `mukti` command does reaches it,
+  and it is kept for `corpus-verify`'s English-only negative check.
+- `LEGACY_FONTS`' doc comment still named `pdf.rs`, deleted in this release,
+  as one of two other font lists in the workspace. It is now the only one, and
+  says how both of the others came to be retired.
+- `.github/dependabot.yml` still grouped `lopdf`, which no longer exists.
+  Replaced with `office_oxide` — the crate that parses the oldest and hairiest
+  binary formats, and which should have been in the file-parsers group from
+  the day it was adopted.
+- **Two tests the plan required and did not get**: the golden screen above,
+  and one integration test that runs the real binary via
+  `env!("CARGO_BIN_EXE_mukti")` — no dev-dependency — covering the exit codes,
+  which stream each line goes to, and that a bare `mukti` in a script still
+  prints help and exits 0. That last one is the guard that keeps guided mode
+  from breaking every script that ever called this tool.
+- The plan's three-state `Verbosity` was built with two states, because the
+  third had no reader: guided mode prints in its own voice and has no
+  flag-mode output to suppress. Recorded rather than quietly dropped.
+
 ### Verified
 
-**229 tests**, up from 153: 81 in `mukti-cli` alone (5 before this section,
-covering the argument-parsing rewrite, the colour ladder against invented
-terminal signals, the path-normalisation rules, the file-name defence, and
-sixteen scripted guided-mode conversations — including the three-unclear-
-answers give-up, the existing-output warning, and the failure-leads-the-
-summary rule) plus the tests already covered above for Parts 1 through 4.
-Clippy clean across the whole workspace, formatting clean, `cargo deny`
-clean, `check-figures.sh`'s five conversion-accuracy gates all MET against
-the rebuilt answer key (the detection false-positive figure it also checks
-is now known and explained to exceed target — see Fixed, above).
+**240 tests**, up from 153 at 0.8.0. Full workspace build, test, `cargo fmt
+--check`, `cargo clippy -D warnings` and `cargo deny check` all clean, and
+the clippy and test runs were repeated with `RUSTFLAGS` unset so the run
+matched what CI sees rather than what a local shell happened to export.
+
+**`corpus-verify --compare` against the pre-change baseline: 0 differing,
+0 failed, 0 panicked.** That is the gate the plan set for every optimisation,
+and it is what licenses the two performance changes above: the differential
+test proves `apply_map` is output-identical rule by rule, and the corpus run
+proves it on real documents.
+
+**A note for anyone parsing this tool's output:** the per-file text on stdout
+has changed wording throughout this release. It was never a stable interface
+and is not becoming one — `--quiet` and the **exit codes** are the contract
+to depend on. Anything reading the prose will need adapting.
 
 ## 0.8.0 — 19 August 2026
 
