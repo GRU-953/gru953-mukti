@@ -1,6 +1,6 @@
 # Handover
 
-Everything a new developer needs to pick GRU953 Mukti up and carry it on.
+Everything a new developer needs to pick Mukti by GRU953 up and carry it on.
 
 Written on 13 August 2026, at version 0.4.0. If you are reading this much
 later, check the figures against a fresh `eval` run before quoting them.
@@ -27,18 +27,31 @@ project's effort went.
 
     crates/
       mukti-core/     conversion, detection, embedded dictionaries  (library)
-      mukti-formats/  .docx .xlsx .pptx readers/writers, PDF reader (library)
+      mukti-formats/  .docx .xlsx .pptx readers/writers, and the pre-2007 reader (library)
       mukti-cli/      the `mukti` command                           (binary)
+        src/main.rs      dispatch and exit codes only
+        src/words.rs     every string a person can see, plus the brand tests
+        src/style.rs     the colour ladder and the fixed palette
+        src/options.rs   argument parsing
+        src/report.rs    number formatting, the file-name defence, progress
+        src/convert.rs   the six-format gate, per-file conversion, the batch
+        src/pathinput.rs turning a typed or dragged-in path into a real one
+        src/guided.rs    the conversation `mukti` alone has on a real terminal
     devtools/         NOT shipped, NOT published
       lexicon-build/  word lists      ->  compressed dictionary
       corpus-label/   real documents  ->  labelled token dataset
-      eval/           the measurement harness
-    .github/workflows/  CI on three platforms; release builds
+      corpus-verify/  runs every document through Mukti and checks invariants
+      eval/           the accuracy measurement harness
+      bench/          the speed measurement harness
+    .github/workflows/  CI; release builds
 
-About 11,800 lines of Rust and nothing else — no HTML, no CSS, no JavaScript, no
+Over 15,000 lines of Rust and nothing else — no HTML, no CSS, no JavaScript, no
 npm, no bundler, no framework. Until 15 August 2026 there was also a desktop
 window with a small web front end; it was removed, and `assets/brand/` went with
-it.
+it. `mukti-cli` was one 641-line file until 0.9.0, when it was split into the
+eight modules above so a beginner-facing guided mode, a colour system, and
+parallelism could each have a place of their own rather than growing inside a
+single dispatch function.
 
 **`devtools/` measures the project; it is not part of the product.** It stays
 in the repository because a claim you cannot reproduce is not a claim.
@@ -75,15 +88,18 @@ Then:
 cargo test --workspace
 ```
 
-152 tests, all passing. Then the command-line tool:
+229 tests, all passing. Then the command-line tool:
 
 ```bash
 cargo run -p mukti-cli -- check <file>
 ```
 
-No system packages are needed on any of the three platforms — a Rust toolchain is
-the whole requirement. That became true on 15 August 2026 when the desktop window
-went; until then the Linux build needed the WebKitGTK development headers.
+No system packages are needed — a Rust toolchain is the whole requirement.
+That became true on 15 August 2026 when the desktop window went; until then
+the Linux build needed the WebKitGTK development headers. CI and the release
+binary have covered macOS on Apple Silicon only since 0.9.0 (see §9,
+Removed), but nothing about the workspace itself is platform-specific, and
+`cargo test --workspace` above works the same wherever Rust does.
 
 ## 4. Read the code in this order
 
@@ -96,8 +112,10 @@ went; until then the Linux build needed the WebKitGTK development headers.
 3. **[tokenise.rs](crates/mukti-core/src/tokenise.rs)** — splits on whitespace
    only and keeps every byte, so untouched text reassembles exactly.
 4. **[encoding.rs](crates/mukti-core/src/encoding.rs)** — a Bijoy `.txt` is
-   almost never UTF-8. It is Windows-1252. Without this the file will not open
-   at all.
+   almost never UTF-8. It is Windows-1252. Not on the shipped `mukti` path any
+   more since 0.9.0 removed plain-text conversion, but `corpus-verify` still
+   calls it to check the English-only negative corpus, which is real safety
+   cover and the reason this module stays.
 5. **[office.rs](crates/mukti-formats/src/office.rs)** — Office files are ZIPs
    of XML. Replacement is position-based, never count-based; see §7.
 
@@ -113,21 +131,41 @@ cargo run --release -p eval -- --corpus <corpus> --labels <labels> --split test
 |---|---|---|
 | Round-trip word accuracy | **99.989%** | 473,244 words |
 | Character grid | **100%** | 3,096 combinations |
-| Detection recall on legacy words | **99.962%** | 177,079 tokens |
-| False positives on English | **0.014%** | 494,050 tokens |
-| False positives on Unicode Bangla | **0.000%** | 343,077 tokens |
+| Detection recall on legacy words | **99.930%** | 286,412 tokens |
+| False positives on English | **0.146%** | 186,894 tokens |
+| False positives on Unicode Bangla | **0.000%** | 1,189,851 tokens |
 | Misspellings preserved unchanged | 99.979% | 14,214 pairs |
 
-**These are the re-measured figures, and they replace an earlier set that is
-still quoted in old release notes.** Detection recall was 99.951% of 154,928
-tokens and English false positives 0.006% of 462,074 on the superseded answer
-key. Recall barely moved; the false-positive rate went from 0.006% to 0.014%
-because the sample grew, and 0.014% is the number to quote. README.md carries the
-same table and is the authority if these two ever disagree again.
+**These replace the 13 August set, and the reason is a fix, not drift.**
+`corpus-label` was labelling any run declaring the font `SutonnyOMJ` as legacy
+Bijoy, on a hand-maintained list that contradicted the converter's own
+`office::NEVER_LEGACY` -- that font has 97 Bengali Unicode codepoints in the
+vendor's own copy. Every `SutonnyOMJ` token was scored as if it were genuine
+Bijoy, which quietly excluded real false positives from ever being measured.
+Fixed 20 August 2026 by having the label ask `office::is_legacy_font`
+directly rather than keeping a second copy of the list by hand -- see
+`Dev-Memory/LESSONS.md` §42 and §44. The English false-positive figure moving
+from 0.014% to 0.146%, above its own 0.10% target, is the honest result:
+traced by hand, most of the residue is genuine Bijoy sitting under a font this
+project has not catalogued as legacy (`Siyam Rupali ANSI` is the leading
+candidate), not a new weakness in the classifier. README.md carries the same
+table and the same explanation, and is the authority if these two ever
+disagree again.
+
+A font-aware use of this same font evidence inside the classifier was
+designed and measured against the real corpus: it would safely rescue only
+365 words, well under the bar set in advance for coupling the classifier's
+decisions to font metadata, so it was not built. See `Dev-Memory/LESSONS.md`
+§44 for the full measurement.
 
 Detection figures come from a **held-out** half of the data that was never
-inspected while tuning. The tuning half gave 99.962% and 0.014% — the agreement
-between the two is the evidence there is no overfitting.
+inspected while tuning. The tuning half gives 99.936% recall — close
+agreement with the test half's 99.930%, which is the evidence there is no
+overfitting on that figure. The two halves do NOT agree as closely on the
+English false-positive rate — 0.079% on tuning against 0.146% on test — and
+that disagreement is itself informative: it is consistent with the residue
+being concentrated in a small number of documents under a specific
+uncatalogued font rather than spread evenly across the corpus (see above).
 
 Two honest caveats, both of which should stay attached to these numbers:
 
@@ -292,37 +330,57 @@ In rough order of value:
    that does needs the corpus re-labelled, which changes the tune/test split
    (LESSONS §11) and so cannot be compared directly with either run. Worth doing as
    its own measurement, not as a third data point in this series.
-3. **Bangla in the command's own messages.** The strings sit in the CLI's source
-   rather than a table, so this is now a small refactor plus a translation, not
-   just a translation. Lower value than it was: someone typing commands is
-   already reading English.
+3. **Bangla in the command's own messages.** Since 0.9.0 every string Mukti can
+   show lives in one file, `crates/mukti-cli/src/words.rs`, with the brand-kit's
+   English writing rules enforced there by test — so this is now closer to a
+   translation than the refactor-plus-translation it used to be, though a
+   parallel Bangla writing standard and its own test suite would still need
+   deciding first. Lower value than it was: someone typing commands is already
+   reading English.
 4. **crates.io.** The crates are prepared and metadata is complete, but
    publishing needs a token belonging to the account owner. Publish in
    dependency order: `gru953-mukti`, then `mukti-formats`, then `mukti-cli`.
 5. **Code signing.** The binaries are unsigned, so both macOS and Windows warn on
    first launch. Needs a paid Apple developer account and a Windows certificate.
-6. **PDF layout.** Text is now joined into real lines rather than one fragment
-   per positioning instruction, which removed 56% of the line breaks on a
-   sampled set. Headings, columns and tables are **not** recovered, and that is
-   a measured decision rather than an omission: 80 documents were judged against
-   a pre-registered scheme, and of the three that were badly scrambled, all three
-   were **tables**, not columns — so the column detection originally planned
-   would have fixed none of them. Table reconstruction is a larger job and is
-   not started. A converted table may put a figure away from its row; check it
-   against the original.
-7. ~~Old binary Office formats are not supported.~~ **Supported since 14 August
+6. ~~Old binary Office formats are not supported.~~ **Supported since 14 August
    2026.** `.doc`, `.xls` and `.ppt` are read and written out as new `.docx`,
    `.xlsx` and `.pptx` files beside the original, which is never modified. All
    141 in the archive convert, and every generated document passes the same
    structural checks Office itself applies. **Text only:** these formats carry no
    formatting we can keep and no font information, so the conversion is decided
-   from the words alone — plain-text accuracy, not the higher font-gated figure.
-8. **Markdown and HTML output.** Planned, then deferred by the owner in favour of
+   from the words alone — plain-text accuracy, not the font-declared figure the
+   other three formats reach.
+7. **Markdown and HTML output.** Planned, then deferred by the owner in favour of
    releasing. Measurement showed it could carry bold (declared in the file, so no
    guessing) and about one line break in eight joined into paragraphs, but not
    headings — font size does not separate them in this archive.
 
-## 9. Ground rules worth keeping
+## 9. Removed
+
+Kept here rather than deleted, because each is a measurement record, not a gap.
+
+- **PDF, in 0.9.0.** Text was joined into real lines rather than one fragment
+  per positioning instruction, which removed 56% of the line breaks on a sampled
+  set. Headings, columns and tables were never recovered, and that was a
+  measured decision rather than an omission: 80 documents were judged against a
+  pre-registered scheme, and of the three that were badly scrambled, all three
+  were **tables**, not columns — so the column detection once planned would have
+  fixed none of them. Removed along with plain text, `.csv` and `.md`, so that
+  only the six ordinary Office formats are converted. Took `lopdf` out of the
+  dependency tree with it — a PDF parser reading untrusted input, and the
+  source of RUSTSEC-2026-0187, one of v0.4.0's three CVEs.
+- **Windows, Linux and Intel macOS, from CI and the release binary, in
+  0.9.0.** Both workflows now build and test macOS on Apple Silicon only.
+  The two-job Intel/ARM macOS split tried before the universal binary was
+  abandoned because scarce `macos-13` runners queued half an hour on a
+  private repository's quota; the Linux build was pinned to `ubuntu-22.04`
+  specifically to hold the binary's glibc requirement at 2.35, a constraint
+  that stopped mattering the day there was no Linux build left to hold it
+  for. Nothing in `gru953-mukti` or `mukti-formats` is platform-specific, so
+  building from source still works anywhere Rust does — only CI coverage
+  and the pre-built binary narrowed.
+
+## 10. Ground rules worth keeping
 
 - **Measure before improving.** No accuracy claim ships without its method and
   its sample size beside it.

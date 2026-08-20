@@ -1,4 +1,4 @@
-# GRU953 Mukti
+# Mukti by GRU953
 
 **Turn legacy Bijoy / SutonnyMJ Bangla into Unicode — word by word, leaving
 everything else alone.**
@@ -21,7 +21,7 @@ Works completely offline. No account, no upload, no network.
 
 ---
 
-> ## ⚠️ The desktop window is gone as of 0.6.0
+> ## Warning: the desktop window is gone as of 0.6.0
 >
 > Mukti is now **only** a command-line tool. The window shipped in 0.3.0 through
 > 0.5.0 and has been removed — one thing done well rather than two adequately.
@@ -45,21 +45,19 @@ Works completely offline. No account, no upload, no network.
 
 ## Install
 
-Download from the [latest release](https://github.com/GRU-953/gru953-mukti/releases/latest)
-and put the file on your `PATH`.
+**macOS on Apple Silicon (M1 or later) only, as of 0.9.0.** Windows, Linux and
+Intel Macs are not built or tested any more — see CHANGELOG.md for why.
+Building from source (below) still works on any platform Rust itself
+supports; only the pre-built binary on the releases page is restricted.
 
-| Your computer | Download |
-|---|---|
-| **macOS** (Intel or Apple silicon) | `mukti-universal-apple-darwin` |
-| **Windows** | `mukti-x86_64-pc-windows-msvc.exe` |
-| **Linux** | `mukti-x86_64-unknown-linux-gnu` |
+Download `mukti-macos` from the
+[latest release](https://github.com/GRU-953/gru953-mukti/releases/latest),
+put it on your `PATH`, and make it executable: `chmod +x mukti-macos`.
 
-On macOS and Linux, make it executable first: `chmod +x mukti-*`.
-
-> **The binaries are not signed.** macOS may say "unidentified developer" — allow
-> it once in *System Settings → Privacy & Security*. Windows SmartScreen may warn:
-> *More info*, then *Run anyway*. Signing needs paid certificates from Apple and a
-> certificate authority, and neither is set up.
+> **The binary is not signed.** macOS will say "unidentified developer" the
+> first time it runs — allow it once in *System Settings → Privacy &
+> Security → Open Anyway*. Signing needs a paid Apple Developer certificate,
+> and none is set up.
 
 **Mukti is a command-line tool.** There was a desktop window until version 0.5.0;
 it was removed in 0.6.0 to keep one thing working well rather than two adequately.
@@ -68,24 +66,43 @@ folders in one go.
 
 ## Use it
 
+Type `mukti` on its own, on a real terminal, and it asks which folder to
+convert, reports what it found, and confirms before writing anything — no
+flags required. Everything below still works exactly as written, for
+scripts, CI, and anyone who prefers to type the whole command:
+
 ```sh
 mukti check report.docx     # say what would change, write nothing
 mukti convert report.docx   # writes report.unicode.docx, formatting intact
-mukti convert *.txt         # many files at once
+mukti convert *.docx        # many files at once
+mukti convert *.docx --jobs 4   # convert up to four files at once
 ```
 
 Your original is never overwritten unless you type `--in-place`. A file Mukti
-named itself is never replaced unless you add `--force`.
+named itself is never replaced unless you add `--force`. Colour is decided
+automatically from the terminal; `mukti --theme dark` (or `light`, or `off`)
+overrides that by hand.
 
 ## What it handles
 
 | Format | What happens |
 |---|---|
-| `.txt` `.csv` `.md` | Converted. Windows-1252 detected automatically — which is what legacy Bangla files usually are |
-| `.json` | **Refused since 0.8.0, deliberately.** Converting one could produce a file that no longer loads: a Bijoy quotation mark becomes a plain `"`, which ends a JSON string early. It happened to 5 of 13 real files the first time JSON was ever tested, on 19 August 2026. Converting it properly needs a JSON parser as a dependency, and the format was dropped instead of adding one |
 | `.docx` `.xlsx` `.pptx` | Converted **inside the document**. Formatting, tables and images untouched. Includes SmartArt, charts, speaker notes and comments |
-| `.pdf` | **Read-only, best effort.** Text extracted and converted; layout is lost |
 | Older `.doc` `.xls` `.ppt` | Converted into a **new** `.docx`, `.xlsx` or `.pptx` beside the original. **Text only** — these formats hold no formatting we can carry, and no font information, so accuracy matches plain text rather than the higher figure above |
+
+**Only these six formats are converted, as of 0.9.0.** Everything else — PDF,
+`.txt`, `.csv`, `.md`, `.json`, anything else — is refused with a plain
+explanation, before a single byte is read. Until this version there was no such
+list: an unrecognised file fell through to a plain-text path that decoded and
+rewrote it regardless of what it actually held, so `mukti convert photo.jpg`
+produced a `photo.unicode.jpg` full of decoded bytes. PDF support is gone
+entirely — it only ever produced plain text with the layout lost, and it took
+a PDF-parsing dependency with it that had already carried one real
+vulnerability ([RUSTSEC-2026-0187](https://rustsec.org/advisories/RUSTSEC-2026-0187)).
+JSON was refused from 0.8.0 for the same reason narrowed formats generally are:
+converting one could produce a file that no longer loads, because a Bijoy
+curly quote becomes a plain `"`, which ends a JSON string early — it happened
+to 5 of 13 real files the first time JSON was tested, on 19 August 2026.
 
 Verified across **every one of 2,315 documents** in a real archive — not a sample.
 
@@ -123,18 +140,41 @@ only produce a confusing error.
 printed "NOT MET" and exited successfully, so a script asking whether the figures
 still held was told yes regardless.
 
-Re-measured from scratch on 13 August 2026, on a freshly rebuilt answer key of
-3,782,953 labelled tokens from 1,377 real documents.
+Re-measured from scratch on 20 August 2026, on a freshly rebuilt answer key of
+7,245,028 labelled tokens from 1,048 real documents.
 
 | | Result | Sample |
 |---|---|---|
 | Conversion, word accuracy | **99.989%** | 473,244 words |
 | Conversion, character accuracy | 99.997% | 3,879,440 characters |
 | Every consonant × every vowel and conjunct | **100%** | 3,096 combinations |
-| Detection, legacy words found | **99.962%** | 177,079 words |
-| Detection, English wrongly converted | **0.014%** | 494,050 words |
-| Detection, Unicode Bangla wrongly converted | **0.000%** | 436,952 words |
+| Detection, legacy words found | **99.930%** | 286,412 words |
+| Detection, English wrongly converted | **0.146%** | 186,894 words |
+| Detection, Unicode Bangla wrongly converted | **0.000%** | 1,189,851 words |
 | Misspellings preserved, not "corrected" | 99.979% | 14,214 words |
+
+**The English figure now fails its own 0.10% target, and that is the honest
+result of a fix, not a new problem.** The answer key used to label a run
+declaring the font `SutonnyOMJ` as legacy Bijoy, on the strength of an
+unverified, hand-maintained list that contradicted the converter's own
+evidence: the vendor's own copy of that font has 97 codepoints in the
+Bengali Unicode block and files it under "Unicode Fonts". Every token in a
+`SutonnyOMJ` run was being measured as if it were genuine Bijoy, which
+quietly excluded some genuine false positives from ever being counted at
+all. Fixing the label (`corpus-label` now asks the converter's own
+`is_legacy_font`, rather than keeping a second list by hand) surfaced them:
+tokens such as `UvKv` (would be টাকা, "Taka") are correctly recognised as
+legacy Bijoy **97% of the time** across the corpus, and the residual few
+percent sit under a font this project has not catalogued as legacy —
+`Siyam Rupali ANSI` is the leading candidate, an ANSI-suffixed variant of a
+family this project's own font list already verifies as Unicode in its
+plain form. Recognising a new legacy font family needs the same measurement
+discipline the existing 127 went through, not a guess added on the strength
+of one document, so it is recorded as open work rather than fixed here.
+A font-aware use of this same evidence inside the classifier was designed,
+measured against the real corpus, and found to safely rescue only 365
+words — well under the bar set in advance for whether it was worth making
+the classifier's decisions depend on font metadata — so it was not built.
 
 **One deliberate exception to "already-correct Bangla is untouched", from 0.7.0.**
 Already-Unicode Bengali passes through byte-for-byte, with a single change: a vowel
@@ -149,19 +189,12 @@ a conversion in the figures a user is shown.
 The detection figures come from a **held-out** half of the data, never looked at
 while anything was tuned.
 
-**Two of these moved, and both are worth saying out loud.** Recall improved
-slightly, on a larger sample. But English wrongly converted went from 0.006% to
-**0.014%** — still comfortably inside the 0.1% target, and still the wrong
-direction. Two things account for it: the held-out half is now a different set of
-documents (see below), and a class of false positive was found that this corpus
-cannot show — an accented European name like `Tomáš` has its accented letters
-inside the byte range Bijoy reuses, so it can be mistaken for legacy Bangla.
-
 **The old figures cannot be reproduced exactly, and that is not a caveat being
 buried.** Which documents land in the held-out half is decided by a hash of each
 file's path, and the document archive has moved. So the halves are a different
-split of the same material. Re-measuring was the honest option; quoting figures
-whose answer key no longer existed was not.
+split of the same material, now also drawn from a larger and more accurately
+labelled set (see above). Re-measuring was the honest option; quoting figures
+whose answer key was known to be wrong was not.
 
 <details>
 <summary><b>How that was measured — including what it cannot tell you</b></summary>
@@ -180,20 +213,29 @@ at, as are runs whose declared font contradicts their own bytes.
 
 **Accuracy on real documents: about 99.9%, and here is how that is known.**
 
-The direct measurement is that **94.053%** of converted words, over real
-documents, are found in the dictionary (177,071 words). It has moved twice, both
-times upward and both times because a fault was found and fixed: 94.015% →
-94.023% when a lost halant was corrected, and → **94.053%** on 14 August 2026
-when byte 0xD0 was found to be the conjunct ণ্ড rather than a dash — 123
-occurrences across 27 words, every one of which had been coming out with a hyphen
-in the middle. That is a **floor**, not an accuracy: names, places, acronyms and rare words are in no word list, so a
-perfectly converted word can be missing from one. Earlier versions of this page
-reported 78.4%, which was simply wrong — it came from a superseded answer key.
+The direct measurement is that **93.481%** of converted words, over real
+documents, are found in the dictionary (286,404 words). It moved twice upward
+because a fault was found and fixed — 94.015% → 94.023% when a lost halant was
+corrected, and → 94.053% on 14 August 2026 when byte 0xD0 was found to be the
+conjunct ণ্ড rather than a dash — and then down to **93.481%** on 20 August
+2026, for a different reason: a larger, more accurately labelled document set
+(see above), not a new converter fault. That is a **floor**, not an accuracy:
+names, places, acronyms and rare words are in no word list, so a perfectly
+converted word can be missing from one. Earlier versions of this page reported
+78.4%, which was simply wrong — it came from a superseded answer key.
 
 So the remaining residue was sampled and read. **Twice** — the study was first run
 on 13 August 2026 against the residue as it then stood, and re-run on 19 August
 after two accuracy fixes had changed what the residue contained. The figures here
 are the re-run's; the first run's are kept below for comparison.
+
+**Not re-run against the 20 August answer key.** The residue study is a hand-rated
+exercise — three blind raters reading real word pairs against a pre-registered
+scheme — not something `eval` reproduces on its own, so the figures below still
+describe the residue from the 19 August labelling. The corpus-label fix described
+above changed which documents are sampled and how some tokens are labelled, so a
+third run would very likely draw a different residue. Recorded as open work,
+not silently left looking current.
 
 **400 words** were drawn at random from the 10,530-word residue with a recorded
 seed (`20260819`), so the same sample can be drawn again. Each was classified with
@@ -259,8 +301,6 @@ mid-study, because the corpus is full of source misspellings and reproducing one
 faithfully is correct behaviour, not an error. That clarification moved the result
 *upwards*, so it is recorded here rather than left implicit.
 
-**PDF quality varies widely.** Across 60 legacy-font PDFs: 28 good (70%+ real
-words), 19 fair, 7 poor, 6 produced nothing. Median 71.3%.
 </details>
 
 ## Why only the right words change
@@ -270,7 +310,7 @@ three ordinary Latin letters, and nothing inside the word can tell you which.
 
 So Mukti reaches **three** verdicts, not two — legacy, not legacy, and
 genuinely uncertain — and lets the surrounding words settle the last of them. In
-the measured data, **72% of legacy words carrying no evidence at all** of being
+the measured data, **71% of legacy words carrying no evidence at all** of being
 legacy are recovered from their neighbours alone.
 
 The thresholds are deliberately lopsided. Missing a legacy word leaves it
@@ -298,18 +338,20 @@ rules, and two dictionaries built into the binary: 451,348 Bangla words and
 ## Build it yourself
 
 ```sh
-cargo test --workspace     # 152 tests, no network needed
+cargo test --workspace     # 229 tests, no network needed
 cargo run -p mukti-cli    # the command-line tool
 ```
 
 The dictionaries are compiled and checked in, so building needs no corpus, no
-network and no system libraries — a Rust toolchain is the only requirement, on
-all three platforms.
+network and no system libraries — a Rust toolchain is the only requirement.
+Building from source works on any platform Rust itself supports; **CI and the
+pre-built binary on the releases page cover macOS on Apple Silicon only**, as
+of 0.9.0 (see Install, above).
 
 | Crate | What it is |
 |---|---|
 | `crates/mukti-core` | The converter, the detector, the dictionaries |
-| `crates/mukti-formats` | Word, Excel, PowerPoint and PDF handling |
+| `crates/mukti-formats` | Word, Excel and PowerPoint handling |
 | `crates/mukti-cli` | The `mukti` command |
 | `devtools/` | Dictionary builder, corpus labeller, accuracy harness. Not shipped |
 
@@ -320,11 +362,6 @@ all three platforms.
   tables and images are not carried across, and because these formats record no
   font, the conversion is decided from the words alone — the same accuracy as a
   plain text file, not the font-gated accuracy quoted for `.docx`.
-- **PDF layout is lost**, and quality varies widely. Text is joined into real
-  lines, but headings, columns and tables are not recovered: measured on 80
-  documents, 3 had tables whose rows cannot be reconstructed, so a figure may
-  appear away from the row it belongs to. Check any converted table against the
-  original.
 - The command's own messages are **English only** for now. They sit in the
   command-line source rather than in a string table, so Bangla would be a small
   refactor plus a translation. Lower value than it looks: somebody typing commands

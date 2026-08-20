@@ -1,5 +1,305 @@
 # Changelog
 
+## 0.9.0 — 20 August 2026
+
+**Six formats, and nothing else.** `.doc`, `.xls`, `.ppt`, `.docx`, `.xlsx` and
+`.pptx` are what Mukti converts now. PDF, `.txt`, `.csv`, `.md` and reading from
+a pipe (`mukti convert -`) are all removed. This is the format restriction half
+of a larger 0.9.0 release; the rest of the entry grows as the remaining work
+lands.
+
+### Removed
+
+- **PDF support**, and the `lopdf` dependency with it. PDF only ever produced
+  plain text with the layout lost, and recovered nothing at all from 22 of 253
+  real files. Removing it also removes a parser reading untrusted input from
+  the dependency tree — `lopdf` was the source of RUSTSEC-2026-0187, one of
+  v0.4.0's three CVEs. `mukti convert report.pdf` now explains this and writes
+  nothing.
+- **Plain-text conversion** — `.txt`, `.csv` and `.md` — and the encoding
+  detection it needed. Any of these files now gets the same six-format refusal
+  as an unrecognised extension.
+- **Reading from a pipe** (`mukti convert -`). It was the last remaining route
+  into the plain-text converter, so removing it let that whole code path go.
+- **A real defect this closes, not just a promise.** There was no allow-list of
+  supported formats at all: anything not recognised fell through to the
+  plain-text path, which decoded it as Windows-1252-or-UTF-8 and wrote a
+  converted sibling regardless of what the file actually held. `mukti convert
+  photo.jpg` produced a `photo.unicode.jpg` full of decoded image bytes. The
+  six-format gate at the top of `mukti-cli`'s dispatch is the fix: an
+  unsupported extension is refused before a single byte is read.
+
+### Changed
+
+- The dependency tree compiled into the shipped binary falls from roughly 88
+  packages to **38** — the full workspace lock from 153 to **78**. Gone: a
+  crypto stack (`aes`, `cbc`, `chacha20`, `sha2`, `md-5`, `digest`), three
+  date/time stacks (`chrono`, `jiff`, `time`), and a work-stealing scheduler
+  (`rayon`) that arrived only through `lopdf`. A Bangla text converter has no
+  business linking AES.
+- `THIRD-PARTY-LICENSES` now states both the full lock-file count and the
+  smaller figure actually compiled into `mukti`, because one number was always
+  ambiguous. Direct dependencies of the shipped crates: four, not five.
+
+### Added (development tools only — not shipped, not published)
+
+- **`devtools/bench`**, a new crate that times the converter against real
+  documents instead of guessing. No benchmark harness existed before this:
+  the only timing code in the workspace asserted a ratio to catch a return to
+  quadratic behaviour, and would not have noticed a 30% change in either
+  direction. It measures three things separately, never summed — `convert()`
+  alone, the classifier on already-extracted text, and end-to-end conversion
+  from disk — tiered by document size, reporting the median of several runs
+  with the min and max, and a `noise-floor` mode that measures the same
+  binary against itself so a later change smaller than that spread can be
+  called what it is: unmeasured, not improved.
+- **`corpus-verify --compare <old.tsv>`**, joining two runs of the tool on a
+  SHA-256 of each input file's own bytes, never its path — the same change
+  makes `--resume` proof against a renamed corpus directory, something that
+  once produced 650 phantom failures. Reports four disjoint counts: identical,
+  differing, vanished (checked before, not this time) and new. A companion
+  `--compare-entries` mode joins on a fingerprint of each archive entry's own
+  content instead of the whole output's bytes, for a change known to touch
+  only how the ZIP container is written — exactly the shape of the zip 2→8
+  bump, which changed three archives' central-directory bytes while leaving
+  every entry's content untouched.
+
+### Fixed
+
+- **A false-positive defect report in `corpus-verify` itself**, found while
+  building `--compare`: its "nothing converted, so require byte-identical"
+  gate checked `words_converted` and `fonts_changed` but not
+  `words_normalised`, so any document holding a decomposed two-part vowel
+  (`ে` + `া`, correctly composed into `ো` since 0.7.0) was reported `FAILED`
+  for a change the converter made correctly and on purpose. A random 15-file
+  sample hit this at 20%. This is a defect in the verification tool, not in
+  Mukti's conversion — nothing shipped is affected.
+
+### Performance
+
+A real CPU profile of converting a 43 MB real workbook (`samply`, see
+`Dev-Memory/LESSONS.md` §41) found over a quarter of all time going to pure
+memory allocation and copying, and a single substring-search call
+(`apply_map`'s `contains`/`replace`) at 23% on its own — confirming what
+static analysis had already suggested and ranking the fixes by actual weight.
+
+- **The classifier no longer converts a word twice.** `Features::of` used to
+  skip its trial conversion only when text was already Unicode Bengali or
+  inert, so every English word still paid the full 223-entry `convert()`
+  table-scan pipeline for a result the classifier's hard stops discard
+  unread. It now also skips the trial for a common English word, a
+  roman-numeral list marker, or a sub/superscript — and the trial
+  conversion, once computed, is reused instead of being run a second time
+  once a word is confirmed `Legacy`. Both changes are provably
+  output-identical by construction (see the comments in `classify.rs`), not
+  merely measured as unchanged.
+- **`opt-level` changed from `"s"` to `3`.** The previous setting optimised
+  for binary size on the premise that "conversion is already far faster than
+  any file we can read from disk" — the profile above shows the opposite by
+  a factor of 60. Binary size grew by only 4.1% (6.38 MB → 6.65 MB).
+- Two small allocation removals: `rearrange` no longer makes a redundant
+  full copy of its input before using it, and `normalise_whitespace`'s two
+  trailing full-string scans are folded into the single pass that already
+  existed, checked against the original two-pass behaviour on all 1,365
+  possible short strings over the relevant alphabet.
+- **`RUSTFLAGS` consolidated into a new `.cargo/config.toml`.** It was set as
+  an environment variable in two places (CI and the local sandbox) but not
+  in the release workflow — since an environment `RUSTFLAGS` silently
+  overrides `.cargo/config.toml` rather than merging with it, this meant the
+  one build that ships was the one build that did not enforce
+  warnings-as-errors. `target-cpu` was measured and deliberately not set:
+  `apple-m4` adds only three instruction-set features, two of them
+  matrix-multiply instructions this codebase never uses, for an expected
+  0–3% at the cost of the binary no longer running on an M1, M2 or M3 Mac.
+
+**Measured against the real corpus** (`bench noise-floor`, 200 real files,
+converted end to end, same binary run twice so the noise floor is known):
+
+| | Before | After | Change |
+|---|---|---|---|
+| 200-file batch (twice) | 9.05s / 9.03s | 4.39s / 4.39s | **-51%** |
+| Noise floor | 0.3% | 0.1% | — |
+
+Every change above was measured individually and gated on
+`corpus-verify --compare` against the full real corpus before the next one
+landed. The combined result, compared against the pre-Part-3 baseline:
+**1,614 identical, 0 differing, 0 vanished, 0 new, across 1,775 files** — the
+whole of this section changes nothing about what any document converts to.
+
+Two further items from the original plan were assessed and **not** pursued
+this round: the `apply_map` substring-search automaton (highest measured
+single cost in the profile, but the population it runs against had already
+shrunk sharply once the classifier stopped converting words twice, and
+further static analysis after these changes should confirm whether it is
+still on the critical path before it is attempted); and parallelism across
+files, deferred to the CLI rebuild that will restructure the exact file it
+would touch, so it is built once in its final home rather than twice.
+
+### Fixed
+
+- **A measurement bug in `corpus-label`, the tool that builds the answer key
+  every accuracy figure is measured against.** It labelled any run declaring
+  the font `SutonnyOMJ` as legacy Bijoy, on a hand-maintained list that
+  contradicted the converter's own `office::NEVER_LEGACY` — the vendor's own
+  copy of that font has 97 codepoints in the Bengali Unicode block and files
+  it under "Unicode Fonts", not the legacy collection. Every token in a
+  `SutonnyOMJ` run was being measured as if it were genuine Bijoy, which
+  quietly excluded real false positives from ever being counted. Fixed by
+  having the label ask the converter's own `office::is_legacy_font` directly
+  rather than keeping a second copy of that list by hand — the same fix also
+  removed three Unicode font names (`adorsholipi`, `nikoshban`, `ekushey`)
+  that the hand-written list still carried as legacy, years after the
+  converter's own list had removed them on evidence. Nothing shipped is
+  affected — this is a defect in the measurement tool, not in Mukti.
+- The labelled corpus was rebuilt against this fix, from 1,048 real documents
+  (7,245,028 labelled tokens, up from 3,782,953). Every published accuracy
+  figure tied to it has been updated in README.md, USING-MUKTI.md and
+  HANDOVER.md to match — including the English false-positive rate, which
+  moved from 0.014% to 0.146% and now exceeds its own 0.10% target. That is
+  the honest result of the fix, not a new problem: traced by hand, the
+  residue is overwhelmingly genuine Bijoy sitting under a font this project
+  has not yet catalogued (`Siyam Rupali ANSI` is the leading candidate), not
+  a new weakness in the classifier. See `Dev-Memory/LESSONS.md` §42 and §44.
+
+### Assessed and not built
+
+- **Using a document's own font information to settle detection refusals.**
+  A `.docx`/`.xlsx`/`.pptx` records the font of every run, and the classifier
+  has never used it — a real, measurable gap. A rule was designed
+  (`font == Legacy && has_ascii_letter && alphanumeric >= 2 &&
+  converted_plausible`) with a proof, checked by unit tests, that it can only
+  ever ADD a conversion and can never touch a word already protected as
+  English, Unicode Bengali, or otherwise excluded. Measured against the real
+  corpus before being built: it would safely rescue only **365 words**,
+  against a 2,840-word bar set in advance for whether the change was worth
+  making the classifier's decisions depend on font metadata at all. Not
+  built, on that measurement. A larger, riskier version — letting a declared
+  legacy font override the English dictionary, reaching up to 12,175 more
+  words — was designed but not pursued: it has no proven safety net (no
+  English-only Office document in the negative corpus carries a legacy font
+  today), and the smaller version's own measurement suggests the honest
+  reachable population is smaller than hoped throughout.
+- A new diagnostic, kept because it is useful independent of this decision:
+  `eval`'s D2 report now breaks down exactly *why* every unrecovered
+  `legacy_ascii` token was refused, by rule, rather than requiring anyone to
+  guess which rules are in principle capable of firing.
+
+### The command line, rebuilt for someone who has never used one
+
+**`mukti` alone now has a conversation instead of printing a usage block.**
+On a real terminal, with no verb and no file named, it asks which folder to
+convert, reports what it found there (by type, noting sub-folders it did not
+look inside and any of its own earlier output it skipped), asks whether the
+result should go in a new folder or beside each original, warns before
+replacing anything that already exists from an earlier run, confirms before
+writing a single byte, shows one progress line while converting, and reports
+— leading with any failure, so a run of 390 successes never reads as
+cheerful about the 10 that were not. Piped, scripted, or run from CI, it
+prints the same help text as before and exits 0: nothing about flag-mode use
+changes. Typing a single file with no verb — `mukti report.docx`, the thing
+a beginner actually types — is asked about directly rather than refused
+over a word ("convert") there was never a reason to know.
+
+**Two new flags.** `--jobs <n>` converts up to that many files at once
+(default 1, which reproduces the exact single-threaded order of every
+earlier release); `--theme <light|dark|off>` sets or disables colour by
+hand. `--out`, `--in-place`, `--force`, `--font` and `--quiet` are
+unchanged.
+
+**Renamed, in every string Mukti prints, from "GRU953 Mukti" to "Mukti by
+GRU953".** The prefix form is the brand kit's own fallback for a name too
+generic to stand alone on its own — "Mukti" is not that, so this follows
+the naming rule as written rather than bending it.
+
+**Colour, decided by a ten-step ladder, never hard-coded.** First match
+wins: `--theme off`; `NO_COLOR` set; stdout not a terminal; `TERM` unset or
+`dumb`; Windows without a VT-capable host; `COLORTERM` not truecolor;
+`--theme light|dark`; `MUKTI_THEME`; `COLORFGBG`'s background field;
+otherwise **no colour**, with a one-line hint (`mukti --theme dark`) shown
+once, before the guided conversation starts. Stdout and stderr are judged
+separately, so `mukti convert *.docx > log.txt` still shows coloured errors
+on screen while writing a clean log. Every coloured state also carries a
+plain-ASCII marker (`[!] Error:`, `[!] Warning:`, `Done.`, `Note:`,
+`Skipped:`), so meaning survives with colour off, in a log file, or in a
+terminal with no glyph coverage for anything fancier.
+
+**Parallelism, folded in from the speed work this release deferred.**
+`--jobs` runs files through `std::thread::scope` (no new dependency —
+`rayon` left the tree in the PDF removal above and stayed out), largest
+file first so a long conversion never queues behind a run of short ones,
+with concurrent bytes in flight bounded so the five-plus `.pptx` files
+known to exceed 200 MB cannot all be in memory at once. Every destination
+is computed up front, single-threaded, before any file is read: two inputs
+that would derive the same output name (`notes.doc` and `notes.docx` both
+become `notes.unicode.docx`) refuse the whole run, naming both, rather than
+letting the second writer silently win a race that never existed before
+threads did.
+
+**A file name is treated as data a stranger chose, not as safe text.** Every
+path reaching a printed message is passed through a defence that turns a
+raw control byte or terminal escape sequence into its visible Unicode
+"control picture" glyph — so a file cleverly named to repaint the terminal
+or impersonate Mukti's own output prints as something safely inert instead.
+
+**Eight modules where one 641-line file stood before**: `words` (every
+string a person can see, plus the brand-compliance test suite that sweeps
+all of them for a banned word, an exclamation mark, an ungrouped number, a
+sentence over 25 words, an error over 30, and the locked tagline byte-exact
+even though it is not currently printed as its own line); `style` (the
+fixed palette and the colour ladder); `options` (argument parsing);
+`report` (number formatting, the file-name defence, word wrap, the progress
+line); `convert` (the six-format gate, per-file conversion, the parallel
+batch); `pathinput` (turning a typed or dragged-in folder path into
+something usable — trailing drag-and-drop spaces, quoted paths, Unix
+backslash-escaping, `file://` URLs, `~`); `guided` (the conversation, tested
+by scripting it over an in-memory stand-in for the file system, with no
+real terminal or document involved); `main` (dispatch only).
+
+**Two simplifications from the original design, recorded rather than
+hidden.** Guided mode converts one file at a time, through the same
+per-file logic flag mode uses, rather than through the parallel batch path
+— the trade for a progress line that can report after every file rather
+than after a whole, possibly reordered, batch; `--jobs` from guided mode is
+not offered, so this costs nothing today. And "some outputs already exist"
+is one yes/no for the whole batch rather than a per-file choice — simpler,
+at the cost of an all-or-nothing answer when only some files collide.
+
+### Release: macOS arm64 only
+
+**`release.yml` builds one binary now, not three.** Windows, Linux and the
+Intel half of the macOS universal binary are gone; `mukti-macos` is an
+Apple Silicon binary only, asserted so by `lipo -archs` rather than merely
+claimed in the file name. Two decisions this deletes were both real,
+expensive lessons, preserved here rather than lost with the code that
+embodied them: the two-job Intel/ARM macOS split this project tried before
+the universal binary was abandoned because `macos-13` runners queued for
+half an hour without starting on a private repository's quota; and the
+Linux build was pinned to `ubuntu-22.04` rather than `ubuntu-latest`
+specifically to hold the binary's glibc requirement at 2.35, so it would
+keep running on Debian 12 and RHEL 9 — a constraint that stops mattering
+the day there is no Linux build to hold it for.
+
+**`ci.yml` tests on macOS only**, for the same reason. The formatting and
+lint job stays on Ubuntu regardless — cheaper, and its verdict does not
+depend on the operating system running it, so this is a stated difference
+rather than an inconsistency. The real cost, worth naming rather than
+burying: a portability break in `gru953-mukti` or `mukti-formats`, both
+ordinary Rust with nothing macOS-specific in them, would now go unnoticed
+here rather than failing on the platform it broke.
+
+### Verified
+
+**229 tests**, up from 153: 81 in `mukti-cli` alone (5 before this section,
+covering the argument-parsing rewrite, the colour ladder against invented
+terminal signals, the path-normalisation rules, the file-name defence, and
+sixteen scripted guided-mode conversations — including the three-unclear-
+answers give-up, the existing-output warning, and the failure-leads-the-
+summary rule) plus the tests already covered above for Parts 1 through 4.
+Clippy clean across the whole workspace, formatting clean, `cargo deny`
+clean, `check-figures.sh`'s five conversion-accuracy gates all MET against
+the rebuilt answer key (the detection false-positive figure it also checks
+is now known and explained to exceed target — see Fixed, above).
+
 ## 0.8.0 — 19 August 2026
 
 **One removal, and it is a removal rather than a fix on purpose.** `.json` is no longer

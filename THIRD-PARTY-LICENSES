@@ -1,7 +1,7 @@
-Third-party licences for GRU953 Mukti
+Third-party licences for Mukti by GRU953
 ======================================
 
-GRU953 Mukti is itself MIT licensed (see LICENSE). It also contains code
+Mukti by GRU953 is itself MIT licensed (see LICENSE). It also contains code
 ported from, and assets produced by, the projects below. Their licences are
 reproduced in full and must be distributed with any copy of this software.
 
@@ -15,9 +15,9 @@ Contents
   6. Rust dependencies — an audited summary
   7. Fonts, the brand tokens and the GRU953 marks — none of which ship any more
 
-Every one of the 157 packages in the dependency tree declares a licence, and all
-of them are permissive. Section 6 records the audit and names the four whose
-obligation survives this project's election of MIT.
+Every package in the dependency tree declares a licence, and all of them are
+permissive. Section 6 records the audit and names the four whose obligation
+survives this project's election of MIT.
 
 
 1. almehady/Bijoy-to-Unicode-File-Converter
@@ -129,21 +129,23 @@ one platform is worse than no guard at all.
 
 6. Rust dependencies
 ---------------------
-Re-audited 15 August 2026, after the desktop window was removed. **157 packages**
-in the full tree, every one declaring a licence, all permissive. No GPL, AGPL or
-SSPL anywhere. The figure was 484 before the removal; the difference is the GTK
-and web-view tree, and the count is derived from the published `Cargo.lock` rather
-than remembered.
+Re-audited 19 August 2026, after PDF support and its parser (`lopdf`) were
+removed in 0.9.0 along with four other file formats. Two figures now, because
+one number was always ambiguous: **78 packages** in the full workspace lock
+(including devtools and test-only dependencies), of which **38** are actually
+compiled into the shipped `mukti` binary — down from 153 and roughly 88 before
+this release, most of that a crypto stack, three date/time stacks and a
+work-stealing scheduler that came in only through the PDF parser. Every one
+declares a licence, all permissive. No GPL, AGPL or SSPL anywhere.
 
-Direct dependencies of the shipped crates — the complete list, five of them:
+Direct dependencies of the shipped crates — the complete list, four of them:
 
   fst                 Unlicense OR MIT   the two embedded dictionaries
                                          (gru953-mukti)
-  lopdf               MIT                reading PDFs
   office_oxide        MIT OR Apache-2.0  reading .doc, .xls and .ppt
   quick-xml           MIT                reading and writing Office XML
   zip                 MIT                Office files are ZIP archives
-                                         (the four above: mukti-formats)
+                                         (the three above: mukti-formats)
 
 `mukti-cli` declares no external dependency of its own. An earlier version of
 this file also listed `calamine`; that was wrong — it is not a dependency of this
@@ -164,13 +166,13 @@ in the runtime dependency tree of the shipped binary, verified with
 
   encoding_rs    0.8.35   (Apache-2.0 OR MIT) AND BSD-3-Clause
                           The BSD-3-Clause part is AND-ed, so it applies whichever
-                          of the other two is chosen. Arrives via lopdf and
-                          office_oxide.
+                          of the other two is chosen. Arrives via office_oxide.
   unicode-ident  1.0.24   (MIT OR Apache-2.0) AND Unicode-3.0
                           Same structure: the Unicode licence applies regardless.
-                          Arrives via zip's proc-macro chain.
+                          Arrives via the proc-macro chains of quick-xml and
+                          office_oxide's serde dependency.
   zlib-rs        0.6.7    Zlib
-                          No MIT option exists. Arrives via flate2, via lopdf.
+                          No MIT option exists. Arrives via flate2, via zip.
   zopfli         0.8.3    Apache-2.0
                           No MIT option exists. Arrives via zip.
 
