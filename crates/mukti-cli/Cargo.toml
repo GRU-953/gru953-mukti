@@ -1,6 +1,6 @@
 [package]
 name = "mukti-cli"
-description = "GRU953 Mukti on the command line: convert legacy Bangla files to Unicode."
+description = "Mukti by GRU953 on the command line: convert legacy Bangla files to Unicode."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,8 +13,8 @@ name = "mukti"
 path = "src/main.rs"
 
 [dependencies]
-gru953-mukti = { path = "../mukti-core", version = "0.8.0" }
-mukti-formats = { path = "../mukti-formats", version = "0.8.0" }
+gru953-mukti = { path = "../mukti-core", version = "0.9.0" }
+mukti-formats = { path = "../mukti-formats", version = "0.9.0" }
 
 [lints]
 workspace = true
