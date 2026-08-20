@@ -8,26 +8,29 @@
 
 pub mod legacy_office;
 pub mod office;
-pub mod pdf;
 
 pub use legacy_office::{
     convert_legacy_office, LegacyFormat, LegacyOutcome, PLAIN_TEXT_ONLY_NOTICE,
 };
 pub use office::{convert_office, runs, Run, Summary};
-pub use pdf::convert_pdf_to_text;
 
 use gru953_mukti::classify::{convert_pieces, count};
 
 /// Convert plain text word by word, counting what changed.
 ///
-/// Shared so the PDF reader and anything else needing plain text go through
-/// exactly the same classifier as the Office rewriter — one decision-maker,
-/// so the accuracy figures describe all of them.
+/// Shared so the legacy `.doc`/`.xls`/`.ppt` reader and anything else needing
+/// plain text go through exactly the same classifier as the Office
+/// rewriter — one decision-maker, so the accuracy figures describe all of
+/// them. Not called by `mukti-cli` directly: the CLI reads only the six
+/// Office formats, and this is `legacy_office`'s route into that shared
+/// classifier for the three that carry no XML at all.
 pub fn convert_text_with_summary(input: &str) -> (String, Summary) {
     let pieces = convert_pieces(input);
     let (converted, untouched) = count(&pieces);
-    let mut summary = Summary::default();
-    summary.words_converted = converted;
-    summary.words_untouched = untouched;
+    let summary = Summary {
+        words_converted: converted,
+        words_untouched: untouched,
+        ..Summary::default()
+    };
     (pieces.into_iter().map(|p| p.text).collect(), summary)
 }

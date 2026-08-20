@@ -8,12 +8,13 @@ members = [
     "devtools/corpus-label",
     "devtools/corpus-verify",
     "devtools/eval",
+    "devtools/bench",
 ]
 
 # Shared metadata. Every crate in the workspace inherits these with
 # `field.workspace = true`, so the version and licence are stated once.
 [workspace.package]
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 rust-version = "1.88"
 license = "MIT"
@@ -24,10 +25,26 @@ authors = ["GRU953"]
 all = "warn"
 
 [profile.release]
-# The dictionary and the conversion tables are the bulk of the binary; a
-# smaller binary matters more here than the last few percent of speed, and
-# conversion is already far faster than any file we can read from disk.
-opt-level = "s"
+# Measured 20 August 2026 on a real 43 MB workbook with `samply` (see
+# Dev-Memory/LESSONS.md §41): converting it took 3.78s against ~60ms to read
+# it from disk, the opposite of what this profile's previous comment
+# claimed ("conversion is already far faster than any file we can read from
+# disk"). A quarter of that time was pure allocation and memory copying, and
+# `opt-level = "s"` was actively fighting the fix -- it disables the loop
+# unrolling and vectorisation that generic code like `str::contains` and
+# `String::replace` benefit from. Changed to `3` on that evidence.
+opt-level = 3
 lto = true
 codegen-units = 1
 strip = true
+
+# For taking a real profile (samply, cargo-instruments, Instruments.app).
+# `[profile.release]` strips symbols, so the shipped binary cannot be
+# profiled -- only inferred about. `cargo build --profile profiling` builds
+# the same optimisation settings with symbols kept, so the diagnosis that the
+# hot path is allocator-bound rather than compute-bound can be confirmed
+# rather than assumed.
+[profile.profiling]
+inherits = "release"
+strip = false
+debug = 1

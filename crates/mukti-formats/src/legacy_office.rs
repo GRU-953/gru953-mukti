@@ -480,6 +480,12 @@ fn write_pptx(slides: &[Slide]) -> Result<(usize, Vec<u8>), String> {
 }
 
 /// A text box, positioned in English Metric Units (914,400 to the inch).
+///
+/// Eight plain positional arguments rather than a geometry struct: each one
+/// is a distinct, independently-meaningful number at both call sites, and
+/// grouping them would just move the lint without changing what the function
+/// does.
+#[allow(clippy::too_many_arguments)]
 fn text_box(
     id: u32,
     name: &str,

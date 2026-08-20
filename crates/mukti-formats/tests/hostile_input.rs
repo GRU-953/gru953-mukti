@@ -1,25 +1,24 @@
 //! Nothing panics, whatever the bytes.
 //!
 //! The conversion core already states this as a property and lets `proptest`
-//! spend thousands of cases on it. The two newest readers had no such cover, and
-//! both shipped in v0.5.0:
-//!
-//! * the pre-2007 Office reader hands bytes to `office_oxide`, a crate four
-//!   months old. Its read path has no production panic sites — that was checked
-//!   by reading it — but every file it had ever been given here was **valid**.
-//!   All 141 in the measurement archive are well-formed, so the archive proves
-//!   nothing at all about damaged input;
-//! * the PDF reader gained transform tracking on 14 August 2026, which means it
-//!   now does arithmetic on numbers a stranger chose.
+//! spend thousands of cases on it. The pre-2007 Office reader had no such
+//! cover when it shipped in v0.5.0: it hands bytes to `office_oxide`, a crate
+//! four months old at the time. Its read path has no production panic sites —
+//! that was checked by reading it — but every file it had ever been given
+//! here was **valid**. All 141 in the measurement archive are well-formed, so
+//! the archive proves nothing at all about damaged input.
 //!
 //! A panic in a library is not a tidy error. In the desktop app it is the window
 //! disappearing while somebody has their document open, so "it returns an error"
 //! and "it panics" are completely different outcomes and only the first is
 //! acceptable.
+//!
+//! The PDF reader once had three tests here too. PDF support was removed in
+//! 0.9.0 along with the reader itself, so they went with it.
 
 use std::panic;
 
-use mukti_formats::{convert_legacy_office, convert_pdf_to_text, LegacyFormat};
+use mukti_formats::{convert_legacy_office, LegacyFormat};
 
 /// Run `f` and report whether it panicked, without letting the panic escape.
 ///
@@ -138,137 +137,6 @@ fn the_refusal_is_written_for_a_person_not_a_parser() {
                 "the message for {name:?} should read as a clause: {message}"
             );
         }
-    }
-}
-
-/// A one-page PDF whose content stream is exactly `operators`.
-fn pdf_with(operators: &str) -> Vec<u8> {
-    use lopdf::{dictionary, Document, Object, Stream};
-    let mut doc = Document::with_version("1.5");
-    let font = doc.add_object(dictionary! {
-        "Type" => "Font", "Subtype" => "Type1",
-        "BaseFont" => "SutonnyMJ", "Encoding" => "WinAnsiEncoding",
-    });
-    let resources = doc.add_object(dictionary! { "Font" => dictionary! { "F1" => font } });
-    let contents = doc.add_object(Stream::new(dictionary! {}, operators.as_bytes().to_vec()));
-    let pages_id = doc.new_object_id();
-    let page = doc.add_object(dictionary! {
-        "Type" => "Page", "Parent" => pages_id,
-        "Contents" => contents, "Resources" => resources,
-        "MediaBox" => vec![0.into(), 0.into(), 612.into(), 792.into()],
-    });
-    doc.objects.insert(
-        pages_id,
-        Object::Dictionary(dictionary! {
-            "Type" => "Pages", "Kids" => vec![page.into()], "Count" => 1,
-        }),
-    );
-    let catalogue = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
-    doc.trailer.set("Root", catalogue);
-    let mut bytes = Vec::new();
-    doc.save_to(&mut bytes)
-        .expect("the test document should save");
-    bytes
-}
-
-#[test]
-fn hostile_pdf_geometry_never_panics() {
-    // Each of these is a number, or a shape of numbers, that the transform
-    // tracking added on 14 August 2026 now has to survive. A reader is free to
-    // divide by the font size, and every one of these makes that a bad idea.
-    let cases: &[(&str, &str)] = &[
-        ("zero font size", "BT /F1 0 Tf 1 0 0 1 72 700 Tm (Kg) Tj ET"),
-        (
-            "negative font size",
-            "BT /F1 -12 Tf 1 0 0 1 72 700 Tm (Kg) Tj ET",
-        ),
-        (
-            "a text matrix of zeroes",
-            "BT /F1 12 Tf 0 0 0 0 0 0 Tm (Kg) Tj ET",
-        ),
-        (
-            "a degenerate transform",
-            "q 0 0 0 0 0 0 cm BT /F1 12 Tf 1 0 0 1 5 5 Tm (Kg) Tj ET Q",
-        ),
-        (
-            "numbers far beyond a page",
-            "BT /F1 1e30 Tf 1e30 0 0 1e30 1e30 1e30 Tm (Kg) Tj ET",
-        ),
-        (
-            "tiny scale, huge offset",
-            "q 1e-30 0 0 1e-30 0 0 cm BT /F1 12 Tf 1 0 0 1 1e20 1e20 Tm (Kg) Tj ET Q",
-        ),
-        (
-            "Q with no q",
-            "Q Q Q BT /F1 12 Tf 1 0 0 1 72 700 Tm (Kg) Tj ET",
-        ),
-        (
-            "negative leading, repeated",
-            "BT /F1 12 Tf -1e18 TL T* T* T* (Kg) Tj ET",
-        ),
-        (
-            "a text object never closed",
-            "BT /F1 12 Tf 1 0 0 1 72 700 Tm (Kg) Tj",
-        ),
-        (
-            "show text before any font",
-            "BT 1 0 0 1 72 700 Tm (Kg) Tj ET",
-        ),
-        ("an empty content stream", ""),
-        (
-            "a rotated and mirrored matrix",
-            "BT /F1 12 Tf 0 -1 1 0 72 700 Tm (Kg) Tj ET",
-        ),
-    ];
-
-    for (name, operators) in cases {
-        let bytes = pdf_with(operators);
-        let crashed = panicked(move || convert_pdf_to_text(&bytes));
-        assert!(!crashed, "a PDF with {name} panicked");
-    }
-}
-
-#[test]
-fn deeply_nested_graphics_state_is_bounded() {
-    // `q` pushes the graphics state and the stack is capped at 64 on purpose. A
-    // file may push as many times as it likes, and the cap has to hold without
-    // either growing without limit or losing the text that follows.
-    let mut operators = "q ".repeat(20_000);
-    operators.push_str("BT /F1 12 Tf 1 0 0 1 72 700 Tm (Kg) Tj ET");
-    operators.push_str(&"Q ".repeat(20_000));
-
-    let bytes = pdf_with(&operators);
-    let copy = bytes.clone();
-    assert!(
-        !panicked(move || convert_pdf_to_text(&copy)),
-        "twenty thousand nested q operators panicked"
-    );
-    // And the text still comes out: a bounded stack must not mean lost content.
-    let (text, _) = convert_pdf_to_text(&bytes).expect("it should still read");
-    assert!(
-        !text.trim().is_empty(),
-        "the text was lost behind the nesting"
-    );
-}
-
-#[test]
-fn a_damaged_pdf_is_refused_and_never_panics() {
-    let cases: &[(&str, &[u8])] = &[
-        ("empty", b""),
-        ("only the header", b"%PDF-1.7\n"),
-        (
-            "header then rubbish",
-            b"%PDF-1.7\n\x00\x01\x02\xff\xfe rubbish",
-        ),
-        ("not a PDF at all", b"PK\x03\x04 this is a zip"),
-        ("a truncated trailer", b"%PDF-1.7\ntrailer<</Root 1 0 R>>"),
-    ];
-    for (name, bytes) in cases {
-        let owned = bytes.to_vec();
-        assert!(
-            !panicked(move || convert_pdf_to_text(&owned)),
-            "a PDF that is {name} panicked"
-        );
     }
 }
 

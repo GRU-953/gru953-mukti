@@ -130,8 +130,21 @@ struct Features {
     converted_is_word: bool,
     /// Whether that conversion is even structurally possible Bengali.
     converted_plausible: bool,
+    /// The trial conversion itself, wherever one was computed. Carried so a
+    /// caller that ends up needing this word converted for real -- because
+    /// its verdict is `Legacy` -- can reuse this rather than calling
+    /// `convert` a second time. `None` wherever no trial conversion was
+    /// computed at all: see the hard-stop gate around where this is set.
+    converted: Option<String>,
     /// A common English word, which no amount of context should override.
     is_english: bool,
+    /// A short bracket/period/colon list marker: `iv)`, `II.`. Computed once
+    /// here rather than a second time in `judge_alone`, since it is also
+    /// needed early to decide whether the trial conversion below is worth
+    /// running at all.
+    is_roman_numeral_marker: bool,
+    /// A true Unicode sub/superscript character is present. Same reason.
+    has_sub_or_superscript: bool,
     /// How many letters and digits the word has. One is never enough.
     alphanumeric: usize,
 }
@@ -186,19 +199,6 @@ impl Features {
             0.0
         } else {
             exotic as f32 / considered as f32
-        };
-
-        // Trial conversion is skipped where it could only mislead: text that is
-        // already Bengali, and text with nothing convertible in it.
-        let (converted_is_word, converted_plausible) = if has_unicode_bengali || is_inert {
-            (false, false)
-        } else {
-            let converted = convert(word);
-            let trimmed = trim_to_bengali(&converted);
-            (
-                !trimmed.is_empty() && dictionary.contains(trimmed),
-                word_is_well_formed(&converted),
-            )
         };
 
         // Two lists, union. The 465,971-word Webster list carries the bulk;
@@ -275,6 +275,41 @@ impl Features {
                 && Dictionary::english().contains_english(without_typography)
         };
 
+        let is_roman_numeral_marker = is_roman_numeral_marker(word);
+        let has_sub_or_superscript = has_sub_or_superscript(word);
+
+        // Trial conversion is skipped wherever `judge_alone`'s two hard stops
+        // would discard it unread: text that is already Bengali or has
+        // nothing convertible in it (hard stop 1), and a common English
+        // word, a roman-numeral list marker, or a sub/superscript (hard
+        // stop 2). Every one of these ends `judge_alone` before
+        // `converted_is_word`/`converted_plausible` is ever consulted, so
+        // computing them was pure waste on exactly the words most documents
+        // are mostly made of. The trial conversion is the single most
+        // expensive thing this function can do -- the full 223-entry
+        // table-scan `convert()` pipeline, plus a `word_is_well_formed`
+        // structural check -- so skipping it here is where the payoff is.
+        //
+        // Provably output-identical: `judge_alone` returns at one of the two
+        // hard stops before it ever reads `converted_is_word` or
+        // `converted_plausible`, so whatever value they hold on that path
+        // cannot affect the verdict. Moving the computation earlier or later
+        // changes nothing but how much of it happens.
+        let hard_stop = has_unicode_bengali
+            || is_inert
+            || is_english
+            || is_roman_numeral_marker
+            || has_sub_or_superscript;
+        let (converted_is_word, converted_plausible, converted) = if hard_stop {
+            (false, false, None)
+        } else {
+            let converted = convert(word);
+            let trimmed = trim_to_bengali(&converted);
+            let is_word = !trimmed.is_empty() && dictionary.contains(trimmed);
+            let plausible = word_is_well_formed(&converted);
+            (is_word, plausible, Some(converted))
+        };
+
         Features {
             alphanumeric: word.chars().filter(|c| c.is_alphanumeric()).count(),
             has_unicode_bengali,
@@ -283,7 +318,10 @@ impl Features {
             exotic_ratio,
             converted_is_word,
             converted_plausible,
+            converted,
             is_english,
+            is_roman_numeral_marker,
+            has_sub_or_superscript,
         }
     }
 }
@@ -298,16 +336,35 @@ fn trim_to_bengali(s: &str) -> &str {
 }
 
 /// Judge one word with no help from its neighbours.
+///
+/// `classify_words_with_conversions` no longer calls this directly -- it
+/// needs the `Features` itself, to keep the trial conversion alongside the
+/// verdict -- so this now exists for tests, which want the verdict alone and
+/// do not care that `verdict_from_features` is one call away.
+#[cfg(test)]
 fn judge_alone(word: &str, dictionary: &Dictionary) -> Verdict {
-    let f = Features::of(word, dictionary);
+    verdict_from_features(&Features::of(word, dictionary))
+}
 
+/// The decision itself, read from `Features` alone.
+///
+/// Extracted from `judge_alone` so that `classify_words_with_conversions` can
+/// compute `Features` once per word, keep the trial conversion it carries,
+/// and still call exactly this same judgement -- one place the verdict logic
+/// is written down, however many things end up wanting the `Features` behind
+/// it.
+fn verdict_from_features(f: &Features) -> Verdict {
     // Hard stops. Nothing below may overturn these.
     if f.has_unicode_bengali || f.is_inert {
         return Verdict::NotLegacy;
     }
     // A common English word stays English whatever else is true of it. This
     // is the guard on the error that matters: silently wrecking readable text.
-    if f.is_english || is_roman_numeral_marker(word) || has_sub_or_superscript(word) {
+    //
+    // Read from `Features`, not recomputed: `Features::of` already needed
+    // both of these, earlier, to decide whether the trial conversion was
+    // worth running at all.
+    if f.is_english || f.is_roman_numeral_marker || f.has_sub_or_superscript {
         return Verdict::NotLegacy;
     }
 
@@ -352,6 +409,53 @@ fn judge_alone(word: &str, dictionary: &Dictionary) -> Verdict {
     Verdict::NotLegacy
 }
 
+/// Which rule inside `verdict_from_features` decided a word's verdict, judged
+/// alone — for diagnostics only. Never called from the shipped classifier;
+/// `eval`'s Step 0 breakdown of *why* a `legacy_ascii` token was refused is
+/// the reason this exists, replacing an estimate with a fact.
+///
+/// Mirrors `verdict_from_features`'s branches exactly, in the same order, so
+/// the two cannot silently drift apart. A word whose alone-verdict is
+/// `Uncertain` and stays that way is reported by which `Uncertain` branch
+/// produced it — "no confirmed neighbour rescued it" is `classify_words`'s
+/// job to know, not this function's, since only the full document gives that
+/// answer.
+pub fn diagnose_alone(word: &str, dictionary: &Dictionary) -> &'static str {
+    let f = Features::of(word, dictionary);
+    if f.has_unicode_bengali || f.is_inert {
+        return "hard_stop_unicode_or_inert";
+    }
+    if f.is_english {
+        return "hard_stop_english";
+    }
+    if f.is_roman_numeral_marker {
+        return "hard_stop_roman_numeral_marker";
+    }
+    if f.has_sub_or_superscript {
+        return "hard_stop_sub_or_superscript";
+    }
+    if f.converted_is_word && f.distinct_exotic >= 1 {
+        return "legacy_byte_and_dictionary";
+    }
+    if f.exotic_ratio >= 0.10 && f.distinct_exotic >= 2 && f.converted_plausible {
+        return "legacy_density";
+    }
+    if f.converted_is_word && f.alphanumeric >= 2 {
+        return "uncertain_dictionary_word";
+    }
+    if f.distinct_exotic >= 1 && f.converted_plausible {
+        return "uncertain_plausible";
+    }
+    if f.converted_is_word {
+        // A single-character dictionary hit: reachable only by the `>= 2`
+        // floor turning it away, since a lone alphanumeric character cannot
+        // reach here any other way.
+        "alphanumeric_floor"
+    } else {
+        "not_a_dictionary_word_and_not_plausible"
+    }
+}
+
 /// How far either side an uncertain word looks for help.
 const CONTEXT_WINDOW: usize = 6;
 
@@ -366,7 +470,34 @@ const CONTEXT_WINDOW: usize = 6;
 /// words. Only confirmed evidence counts, or a page of ambiguous ASCII would
 /// talk itself into being Bengali.
 pub fn classify_words(words: &[&str], dictionary: &Dictionary) -> Vec<Verdict> {
-    let mut verdicts: Vec<Verdict> = words.iter().map(|w| judge_alone(w, dictionary)).collect();
+    classify_words_with_conversions(words, dictionary)
+        .into_iter()
+        .map(|(verdict, _converted)| verdict)
+        .collect()
+}
+
+/// `classify_words`, but also returning each word's trial conversion
+/// wherever `Features::of` computed one.
+///
+/// Reusing this string is what closes the double conversion this classifier
+/// used to cost every legacy word: once here, as the trial that decides the
+/// verdict, and once more by the caller -- `convert_pieces`,
+/// `office::rewrite_part` -- to actually rewrite the word. `None` wherever no
+/// trial conversion was computed at all: a hard stop was hit first (already
+/// Unicode Bengali or inert, a common English word, a roman-numeral list
+/// marker, a sub/superscript).
+///
+/// The conversion survives context promotion untouched. A word promoted from
+/// `Uncertain` to `Legacy` by its neighbours must itself have passed both
+/// hard stops to reach `Uncertain` at all -- see `verdict_from_features` --
+/// so its trial conversion was already computed in the first pass below and
+/// needs no second look.
+pub fn classify_words_with_conversions(
+    words: &[&str],
+    dictionary: &Dictionary,
+) -> Vec<(Verdict, Option<String>)> {
+    let features: Vec<Features> = words.iter().map(|w| Features::of(w, dictionary)).collect();
+    let mut verdicts: Vec<Verdict> = features.iter().map(verdict_from_features).collect();
 
     let confirmed: Vec<bool> = verdicts.iter().map(|v| *v == Verdict::Legacy).collect();
 
@@ -383,7 +514,12 @@ pub fn classify_words(words: &[&str], dictionary: &Dictionary) -> Vec<Verdict> {
             Verdict::NotLegacy
         };
     }
+
     verdicts
+        .into_iter()
+        .zip(features)
+        .map(|(verdict, f)| (verdict, f.converted))
+        .collect()
 }
 
 /// Convert a document, rewriting only the words that are genuinely legacy.
@@ -421,10 +557,12 @@ pub fn convert_pieces(input: &str) -> Vec<Piece> {
         .filter(|s| s.kind == Kind::Word)
         .map(|s| s.text)
         .collect();
-    let verdicts = classify_words(&words, dictionary);
+    // `_with_conversions`: reuses each `Legacy` word's trial conversion
+    // below instead of calling `convert` on it a second time.
+    let judged = classify_words_with_conversions(&words, dictionary);
+    let mut judged = judged.into_iter();
 
     let mut pieces = Vec::with_capacity(segments.len());
-    let mut w = 0usize;
     for segment in &segments {
         match segment.kind {
             Kind::Gap => pieces.push(Piece {
@@ -433,10 +571,16 @@ pub fn convert_pieces(input: &str) -> Vec<Piece> {
                 word: false,
             }),
             Kind::Word => {
-                let changed = verdicts[w] == Verdict::Legacy;
+                let (verdict, converted) = judged.next().expect("one verdict per word segment");
+                let changed = verdict == Verdict::Legacy;
                 pieces.push(Piece {
                     text: if changed {
-                        convert(segment.text)
+                        // Reuse the trial conversion computed while judging
+                        // this word. Available whenever the verdict is
+                        // `Legacy`; see `classify_words_with_conversions`.
+                        // The fallback is a defence that must never actually
+                        // run.
+                        converted.unwrap_or_else(|| convert(segment.text))
                     } else {
                         // A word that is NOT legacy is returned as it came, with one
                         // exception: Bengali's two-part vowel signs are composed.
@@ -458,7 +602,6 @@ pub fn convert_pieces(input: &str) -> Vec<Piece> {
                     changed,
                     word: true,
                 });
-                w += 1;
             }
         }
     }

@@ -1,0 +1,23 @@
+[package]
+name = "bench"
+description = "Times the converter against real documents. Development tool; not shipped, not published."
+publish = false
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+gru953-mukti = { path = "../../crates/mukti-core" }
+mukti-formats = { path = "../../crates/mukti-formats" }
+
+# A hand-rolled hash was considered and rejected for the same reason
+# corpus-verify rejects one: a collision here would produce a false
+# "identical" verdict in a report a speed decision gets made from, and that
+# is the one place not to economise.
+sha2 = "0.10"
+
+[lints]
+workspace = true

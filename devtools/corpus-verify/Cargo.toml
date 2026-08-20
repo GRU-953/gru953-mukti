@@ -15,6 +15,13 @@ mukti-formats = { path = "../../crates/mukti-formats" }
 # See crates/mukti-formats/Cargo.toml for why this is 8 and how it was verified.
 zip = { version = "8", default-features = false, features = ["deflate"] }
 quick-xml = "0.41"
+# Keys every report row on the INPUT's content, never its path -- a corpus
+# directory has moved four times in this project's life, and keying on path
+# once produced 650 phantom failures. A hand-rolled hash was considered and
+# rejected: a collision here would produce a false "identical" verdict in a
+# report a speed decision gets made from, and that is the one place not to
+# economise.
+sha2 = "0.10"
 
 [lints]
 workspace = true

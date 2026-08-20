@@ -33,22 +33,26 @@ use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::{Path, PathBuf};
 
-/// Legacy Bangla fonts, lower-cased for comparison.
+/// The Sutonny variants Mukti's conversion TABLES are actually shaped for,
+/// lower-cased for comparison.
 ///
-/// The two Sutonny variants are what Mukti converts. The rest are recorded
-/// separately so the harness can report honestly on text Mukti is **not**
-/// claiming to handle, rather than quietly scoring itself on it.
-const SUTONNY: &[&str] = &["sutonnymj", "sutonnyomj", "sutonnyemj"];
-const OTHER_LEGACY: &[&str] = &[
-    "boishakhi",
-    "bornosoft",
-    "sulekha",
-    "chandrabati",
-    "modhumatimj",
-    "adorsholipi",
-    "nikoshban",
-    "ekushey",
-];
+/// Deliberately narrower than `office::is_legacy_font`: that answers "is
+/// this any of the 127 legacy families the converter *recognises*", which is
+/// a different claim from "this is the specific byte-to-glyph mapping the
+/// conversion tables encode". A document in `ChandrabatiMJ` is legacy, but
+/// converting it through Sutonny's tables is not something this project
+/// claims works, so it is reported as `OtherLegacy` rather than folded into
+/// the same figure `Legacy`/`LegacyAscii` measure.
+///
+/// `sutonnyomj` is deliberately absent. It matched here until 20 August
+/// 2026, contradicting `office::NEVER_LEGACY`: the vendor's own copy of that
+/// font has 97 codepoints in the Bengali Unicode block and files it under
+/// "Unicode Fonts", not the legacy collection. Every token in a `SutonnyOMJ`
+/// run was being scored as legacy Bijoy on the strength of a font name that
+/// only happens to contain the letters `mj` -- and `office::is_legacy_font`,
+/// called below, already excludes it, so listing it here would be dead
+/// weight even if it were still legacy.
+const SUTONNY: &[&str] = &["sutonnymj", "sutonnyemj"];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Label {
@@ -147,15 +151,22 @@ fn classify(token: &str, font: Option<&str>) -> Label {
     }
 
     let family = font.map(str::to_lowercase).unwrap_or_default();
-    if SUTONNY.iter().any(|f| family.contains(f)) {
-        return if has_bijoy_range(token) {
-            Label::Legacy
+    // `office::is_legacy_font` is the single authority on "is this any of
+    // the 127 legacy families the converter recognises" -- the same
+    // question `office.rs` itself asks before renaming a font, and the same
+    // list `NEVER_LEGACY` excludes `sutonnyomj` and `sutonnyunibangla` from.
+    // Duplicating that list here, by hand, is exactly what let it drift out
+    // of step and mislabel every `SutonnyOMJ` token as legacy Bijoy.
+    if office::is_legacy_font(&family) {
+        return if SUTONNY.iter().any(|f| family.contains(f)) {
+            if has_bijoy_range(token) {
+                Label::Legacy
+            } else {
+                Label::LegacyAscii
+            }
         } else {
-            Label::LegacyAscii
+            Label::OtherLegacy
         };
-    }
-    if OTHER_LEGACY.iter().any(|f| family.contains(f)) {
-        return Label::OtherLegacy;
     }
 
     // The font says this is not legacy. The bytes disagree.
@@ -213,7 +224,7 @@ fn split_of(path: &Path) -> &'static str {
         hash ^= u64::from(*b);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
-    if hash % 2 == 0 {
+    if hash.is_multiple_of(2) {
         "tune"
     } else {
         "test"
@@ -271,7 +282,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // A document index, not a path: the context pass needs to know which
     // words sit together, and a bare integer says that without carrying a
     // private file name out of the archive.
-    writeln!(writer, "split\tdoc\tlabel\ttoken")?;
+    //
+    // `font` is the same three-way signal a font-aware classifier receives
+    // (`legacy`/`other`/`none`), not the raw font name -- coarse on purpose,
+    // so this column measures what the classifier could actually be given,
+    // not a diagnostic aid that happens to leak more. Placed before `token`,
+    // which stays last since it is the one column that might itself contain
+    // a stray tab.
+    writeln!(writer, "split\tdoc\tlabel\tfont\ttoken")?;
 
     // Counts only. Never a token, never a file name — this goes to the terminal.
     let mut counts: BTreeMap<(&str, Label), usize> = BTreeMap::new();
@@ -327,17 +345,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             // A token may span runs with different fonts. A legacy font
             // anywhere in it wins: half a word set in SutonnyMJ is still a
-            // legacy word, and it is the half that decides.
+            // legacy word, and it is the half that decides. The same
+            // authority as `classify`'s own check, so the two cannot
+            // disagree about what counts as a legacy font.
             let font = fonts[index..index + token.chars().count()]
                 .iter()
                 .flatten()
-                .find(|f| {
-                    let lower = f.to_lowercase();
-                    SUTONNY
-                        .iter()
-                        .chain(OTHER_LEGACY)
-                        .any(|n| lower.contains(n))
-                })
+                .find(|f| office::is_legacy_font(&f.to_lowercase()))
                 .or_else(|| {
                     fonts[index..index + token.chars().count()]
                         .iter()
@@ -352,7 +366,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 legacy_here += 1;
             }
             *counts.entry((split, label)).or_default() += 1;
-            writeln!(writer, "{split}\t{doc}\t{}\t{token}", label.as_str())?;
+            let font_col = match &font {
+                None => "none",
+                Some(f) if office::is_legacy_font(&f.to_lowercase()) => "legacy",
+                Some(_) => "other",
+            };
+            writeln!(
+                writer,
+                "{split}\t{doc}\t{}\t{font_col}\t{token}",
+                label.as_str()
+            )?;
         }
         if legacy_here > 0 {
             documents_with_legacy += 1;
@@ -457,7 +480,26 @@ mod tests {
         // Pure ASCII: genuinely legacy, but indistinguishable from English
         // without the font, so it is kept as its own class.
         assert_eq!(classify("bvg", Some("SutonnyMJ")), Label::LegacyAscii);
-        assert_eq!(classify("2026", Some("SutonnyOMJ")), Label::LegacyAscii);
+    }
+
+    /// `SutonnyOMJ` is a Unicode font despite the `MJ` in its name -- the
+    /// vendor's own copy has 97 codepoints in the Bengali Unicode block and
+    /// files it under "Unicode Fonts" -- and until 20 August 2026 it matched
+    /// the bare `SUTONNY` substring list here anyway, so every token in a
+    /// `SutonnyOMJ` run was labelled legacy Bijoy on the strength of a font
+    /// name that happens to contain the letters `mj`. `office::NEVER_LEGACY`
+    /// already excluded it; this only mislabelled because the check here
+    /// duplicated that list by hand instead of asking `office::is_legacy_font`.
+    #[test]
+    fn sutonnyomj_is_not_legacy_despite_its_name() {
+        assert_eq!(classify("2026", Some("SutonnyOMJ")), Label::Inert);
+        assert_eq!(classify("Programme", Some("SutonnyOMJ")), Label::English);
+        // A Bijoy-range byte under a font the font-name check now says is
+        // NOT legacy: exactly the disputed case, not a silent Legacy label.
+        assert_eq!(
+            classify("Kg\u{a9}m~wP", Some("SutonnyOMJ")),
+            Label::FontDisputed
+        );
     }
 
     #[test]

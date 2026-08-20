@@ -26,7 +26,7 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use gru953_mukti::classify::{classify_words, Verdict};
+use gru953_mukti::classify::{classify_words, diagnose_alone, Verdict};
 use gru953_mukti::dictionary::Dictionary;
 use gru953_mukti::roundtrip::{is_testable_word, normalise_nukta, to_bijoy};
 use gru953_mukti::{convert, detect, word_is_well_formed, LegacyEncoding};
@@ -612,12 +612,18 @@ fn detection_with_context(
     // one-off reference, so this can be looked at without reading documents.
     let mut wrong_english: BTreeMap<String, usize> = BTreeMap::new();
     let mut missed_legacy: BTreeMap<String, usize> = BTreeMap::new();
+    // Why a `legacy_ascii` token was refused, bucketed by the rule that
+    // refused it -- turns an estimate of the font-aware classifier's
+    // reachable population into a fact, rather than a guess based on which
+    // rules are in principle capable of firing.
+    let mut legacy_ascii_refused_by: BTreeMap<&'static str, usize> = BTreeMap::new();
 
     let flush = |words: &mut Vec<String>,
                  labels: &mut Vec<&'static str>,
                  counts: &mut BTreeMap<&'static str, (usize, usize)>,
                  wrong: &mut BTreeMap<String, usize>,
-                 missed: &mut BTreeMap<String, usize>| {
+                 missed: &mut BTreeMap<String, usize>,
+                 refused_by: &mut BTreeMap<&'static str, usize>| {
         if words.is_empty() {
             return;
         }
@@ -635,6 +641,10 @@ fn detection_with_context(
             // much as what is wrongly taken.
             if *verdict != Verdict::Legacy && *label == "legacy" {
                 *missed.entry((*word).to_owned()).or_default() += 1;
+            }
+            if *verdict != Verdict::Legacy && *label == "legacy_ascii" {
+                let reason = diagnose_alone(word, dictionary);
+                *refused_by.entry(reason).or_default() += 1;
             }
         }
         words.clear();
@@ -661,6 +671,7 @@ fn detection_with_context(
                 &mut counts,
                 &mut wrong_english,
                 &mut missed_legacy,
+                &mut legacy_ascii_refused_by,
             );
             doc = row.doc;
         }
@@ -673,6 +684,7 @@ fn detection_with_context(
         &mut counts,
         &mut wrong_english,
         &mut missed_legacy,
+        &mut legacy_ascii_refused_by,
     );
 
     let get = |k: &str| counts.get(k).copied().unwrap_or((0, 0));
@@ -719,6 +731,22 @@ fn detection_with_context(
     println!("    {}", Proportion::new(amb_hit, amb_n).describe());
     println!("    These are real legacy words that carry no evidence of it. Every one");
     println!("    recovered here was recovered from its neighbours alone.");
+
+    let refused_total: usize = legacy_ascii_refused_by.values().sum();
+    println!(
+        "\n  Of the {} not recovered, refused by (bucketed by the rule, not a guess):",
+        thousands(amb_n - amb_hit)
+    );
+    debug_assert_eq!(refused_total, amb_n - amb_hit);
+    let mut reasons: Vec<_> = legacy_ascii_refused_by.iter().collect();
+    reasons.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+    for (reason, count) in &reasons {
+        println!(
+            "    {:>8}  {:>6.2}%  {reason}",
+            thousands(**count),
+            100.0 * **count as f64 / refused_total.max(1) as f64
+        );
+    }
 
     let mut miss: Vec<_> = missed_legacy.iter().collect();
     miss.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
@@ -801,18 +829,46 @@ impl Config {
     }
 }
 
+/// The header `corpus-label` writes. Checked, not assumed: running this
+/// binary against an older-format labelled corpus must fail with a plain
+/// message rather than silently gluing `font` onto every token and printing
+/// plausible-looking nonsense.
+const EXPECTED_HEADER: &str = "split\tdoc\tlabel\tfont\ttoken";
+
 /// Stream the labelled set. 152 MB on disk, so never all at once.
 fn rows(path: &Path) -> Result<impl Iterator<Item = std::io::Result<Row>>, std::io::Error> {
-    let file = BufReader::new(fs::File::open(path)?);
-    Ok(file.lines().skip(1).filter_map(|line| match line {
+    let mut file = BufReader::new(fs::File::open(path)?);
+    let mut header = String::new();
+    file.read_line(&mut header)?;
+    if header.trim_end() != EXPECTED_HEADER {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!(
+                "{} has an unexpected header ({:?}, expected {:?}). Re-run \
+                 corpus-label to rebuild it in the current format before \
+                 running eval again.",
+                path.display(),
+                header.trim_end(),
+                EXPECTED_HEADER
+            ),
+        ));
+    }
+    Ok(file.lines().filter_map(|line| match line {
         Err(e) => Some(Err(e)),
         Ok(line) => {
-            let mut parts = line.splitn(4, '\t');
-            match (parts.next(), parts.next(), parts.next(), parts.next()) {
-                (Some(s), Some(d), Some(l), Some(t)) => Some(Ok(Row {
+            let mut parts = line.splitn(5, '\t');
+            match (
+                parts.next(),
+                parts.next(),
+                parts.next(),
+                parts.next(),
+                parts.next(),
+            ) {
+                (Some(s), Some(d), Some(l), Some(f), Some(t)) => Some(Ok(Row {
                     split: s.to_owned(),
                     doc: d.parse().unwrap_or(0),
                     label: l.to_owned(),
+                    font: f.to_owned(),
                     token: t.to_owned(),
                 })),
                 _ => None,
@@ -826,6 +882,10 @@ struct Row {
     split: String,
     doc: usize,
     label: String,
+    /// `legacy`/`other`/`none` -- the same three-way signal a font-aware
+    /// classifier would receive, not the raw font name.
+    #[allow(dead_code)] // read by the diagnostics added alongside this field
+    font: String,
     token: String,
 }
 

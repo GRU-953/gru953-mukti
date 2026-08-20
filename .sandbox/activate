@@ -39,9 +39,13 @@ export PATH="$CARGO_HOME/bin:/opt/homebrew/opt/rustup/bin:$_MUKTI_OLD_PATH"
 # familiar `cargo clean` still does what you expect.
 export CARGO_TARGET_DIR="$_MUKTI_ROOT/target"
 
-# Treat every compiler warning as an error, exactly as CI does, so a warning
-# cannot pass here and then fail the build on GitHub.
-export RUSTFLAGS="-D warnings"
+# Treating every compiler warning as an error used to be set here as an
+# environment variable. It is now in the workspace's own `.cargo/config.toml`
+# instead, since `RUSTFLAGS` in the environment silently overrides that file
+# rather than merging with it -- and until 20 August 2026 that meant the
+# release workflow, which set no such variable, was the one build that did
+# not enforce this. One place now, for every build. Do not re-add the
+# variable here.
 
 # Where the measurement corpus lives.
 #
@@ -73,7 +77,7 @@ deactivate_mukti() {
     export PATH="$_MUKTI_OLD_PATH"
     if [ -n "$_MUKTI_OLD_CARGO_HOME" ]; then export CARGO_HOME="$_MUKTI_OLD_CARGO_HOME"; else unset CARGO_HOME; fi
     if [ -n "$_MUKTI_OLD_RUSTUP_HOME" ]; then export RUSTUP_HOME="$_MUKTI_OLD_RUSTUP_HOME"; else unset RUSTUP_HOME; fi
-    unset CARGO_TARGET_DIR RUSTFLAGS MUKTI_CORPUS MUKTI_ARCHIVE
+    unset CARGO_TARGET_DIR MUKTI_CORPUS MUKTI_ARCHIVE
     unset _MUKTI_ACTIVE _MUKTI_OLD_PATH _MUKTI_OLD_CARGO_HOME _MUKTI_OLD_RUSTUP_HOME
     unset -f deactivate_mukti
     echo "Mukti build environment switched off."

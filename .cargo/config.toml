@@ -1,0 +1,21 @@
+# The single place `-D warnings` is set, for every build: local, CI and the
+# release workflow.
+#
+# `RUSTFLAGS` in the environment silently OVERRIDES this file rather than
+# merging with it. Until 20 August 2026 the warning-as-error flag was set as
+# an environment variable in two places -- CI and the local sandbox -- but
+# NOT in the release workflow, so the one build that ships was also the one
+# build that did not fail on a warning. Consolidated here instead, with both
+# environment exports removed, so there is exactly one place this is decided
+# and every build sees the same thing.
+#
+# `target-cpu` was considered and NOT adopted, on measurement rather than on
+# guesswork: `-C target-cpu=apple-m4` adds exactly three instruction-set
+# features over the default (`bf16`, `bti`, `i8mm`), two of them
+# matrix-multiply instructions this codebase never executes, so the honest
+# expected payoff was 0-3%, quite possibly negative because of `bti`'s branch
+# hardening cost. It would also stop the released binary running on an M1, M2
+# or M3 Mac -- a functional regression dressed as an optimisation. See
+# Dev-Memory/LESSONS.md for the measurement.
+[build]
+rustflags = ["-D", "warnings"]

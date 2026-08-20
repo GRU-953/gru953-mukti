@@ -605,7 +605,7 @@ mod tests {
 
 use std::io::{Cursor, Write as _};
 
-use gru953_mukti::classify::{classify_words, Verdict};
+use gru953_mukti::classify::{classify_words_with_conversions, Verdict};
 use gru953_mukti::convert;
 use gru953_mukti::dictionary::Dictionary;
 use gru953_mukti::tokenise::{tokenise, Kind};
@@ -697,11 +697,13 @@ pub const LEGACY_FONTS: &[&str] = &[
     // is the same mistake as adding one — see LESSONS §3.
     "boishakhi",
     "bornosoft",
-    // These two are redundant against `mj` for every family in the collection,
-    // and kept anyway because the PDF reader's stricter list names them and a
-    // test requires everything it matches to match here too. A font called
-    // plainly `Sutonny` or `Chandrabati`, with no `MJ`, would otherwise be
-    // converted on sight by the PDF path and left alone by this one.
+    // These two are redundant against `mj` for every family in the vendor
+    // collection, and kept anyway on the same rule as `boishakhi` and
+    // `bornosoft` above: removing a legacy font on no evidence is the same
+    // mistake as adding one. They arrived with a stricter list the PDF reader
+    // once kept (removed in 0.9.0, along with PDF support itself), and
+    // `is_exactly_legacy_font` below compares by equality, so a font named
+    // plainly `Sutonny` or `Chandrabati`, with no `MJ`, is still matched here.
     "sutonny",
     "chandrabati",
     // REMOVED on evidence: `adorsholipi`, `nikoshban` and `ekushey` name
@@ -759,11 +761,12 @@ pub fn is_legacy_font(name: &str) -> bool {
 /// genuine legacy families collide with any such rule — `MonooMJ` lowercased
 /// ends in `omj` too.
 ///
-/// **Why this matters more in the PDF reader than here.** In an Office document
-/// the word classifier refuses outright to touch anything already holding Unicode
-/// Bengali, so a wrong entry costs a font rename. In a PDF the font name is the
-/// whole authority, so a Unicode font on a legacy list means correct Bengali is
-/// put through the Bijoy tables.
+/// In an Office document the word classifier refuses outright to touch
+/// anything already holding Unicode Bengali, so a wrong entry here costs only
+/// a font rename, not a mangled word — the reason this list matters less now
+/// than it did when a PDF reader trusted font names as its sole authority
+/// (removed in 0.9.0). It is kept regardless, because a font rename is still
+/// a cost worth avoiding on evidence like this.
 const NEVER_LEGACY: &[&str] = &["sutonnyomj", "sutonnyunibangla"];
 
 /// Is this text *exactly* the name of a legacy font, and nothing else?
@@ -939,7 +942,11 @@ fn rewrite_part(
         .filter(|s| s.kind == Kind::Word)
         .map(|s| s.text)
         .collect();
-    let verdicts = classify_words(&words, dictionary);
+    // `_with_conversions` rather than `classify_words`: it carries the trial
+    // conversion `Features::of` already computed for each word alongside its
+    // verdict, so a word verdicted `Legacy` below is not run through
+    // `convert()` a second time.
+    let mut judged = classify_words_with_conversions(&words, dictionary);
 
     // What each word becomes, tied to WHERE it sits in the joined text.
     //
@@ -964,10 +971,19 @@ fn rewrite_part(
                 changed: false,
             }),
             Kind::Word => {
-                let changed = verdicts[w] == Verdict::Legacy;
+                let changed = judged[w].0 == Verdict::Legacy;
                 let text = if changed {
                     summary.words_converted += 1;
-                    convert(segment.text)
+                    // Reuse the trial conversion computed while judging this
+                    // word, rather than calling `convert` again. Available
+                    // whenever the verdict is `Legacy`: reaching that
+                    // verdict, directly or by later promotion from
+                    // `Uncertain`, requires having passed both hard stops in
+                    // `Features::of`, which is exactly when a trial
+                    // conversion was computed. `unwrap_or_else` is a defence
+                    // against that invariant somehow not holding; it must
+                    // never actually run.
+                    std::mem::take(&mut judged[w].1).unwrap_or_else(|| convert(segment.text))
                 } else {
                     summary.words_untouched += 1;
                     // Compose the two-part vowels, exactly as `classify::convert_pieces`

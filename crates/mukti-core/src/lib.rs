@@ -171,21 +171,38 @@ fn apply_map(input: &str, map: &[(&str, &str)]) -> String {
 ///
 /// Reimplemented directly so GRU953-Mukti needs no regex dependency.
 fn normalise_whitespace(input: &str) -> String {
+    // Two extra full scans and allocations used to follow this loop --
+    // `.replace(" \n", "\n").replace("\n ", "\n")` -- to drop a space that
+    // ended up hugging a line break. Folded into the one pass instead: a
+    // pending space is dropped rather than emitted whenever a newline is the
+    // very next character (" \n" -> "\n"), or was the character just
+    // emitted ("\n " -> "\n"). `differential_test_of_whitespace_folding`
+    // checks this against the two-pass original directly.
     let mut out = String::with_capacity(input.len());
-    let mut last_was_space = false;
+    let mut pending_space = false;
+    let mut after_newline = false;
     for c in input.chars() {
         if c == ' ' {
-            if !last_was_space {
-                out.push(c);
-            }
-            last_was_space = true;
-        } else {
-            last_was_space = false;
+            pending_space = true;
+        } else if c == '\n' {
+            pending_space = false;
             out.push(c);
+            after_newline = true;
+        } else {
+            if pending_space {
+                if !after_newline {
+                    out.push(' ');
+                }
+                pending_space = false;
+            }
+            out.push(c);
+            after_newline = false;
         }
     }
-    // Drop spaces that ended up hugging a line break.
-    out.replace(" \n", "\n").replace("\n ", "\n")
+    if pending_space && !after_newline {
+        out.push(' ');
+    }
+    out
 }
 
 /// Move a reph that sits after its consonant cluster to the front of it.
@@ -285,8 +302,12 @@ fn collapse_doubled_halants(joined: &str) -> Vec<char> {
 }
 
 fn rearrange(input: &str) -> String {
-    let joined: String = input.chars().collect();
-    let mut s: Vec<char> = collapse_doubled_halants(&joined);
+    // `input.chars().collect::<String>()` is `input.to_owned()` for any
+    // valid `&str` -- a full allocating copy that was then immediately
+    // reborrowed and never mutated. `collapse_doubled_halants` already takes
+    // `&str` and does its own `chars().collect()` into the `Vec<char>` it
+    // actually needs, so `input` goes there directly.
+    let mut s: Vec<char> = collapse_doubled_halants(input);
 
     let mut i = 0usize;
     while i < s.len() {
@@ -2024,6 +2045,59 @@ mod tests {
                     "{later:?} can never match: {key:?} is applied first"
                 );
             }
+        }
+    }
+
+    /// The exact two-pass implementation `normalise_whitespace` used to be,
+    /// kept here only as the reference the folded one-pass version is
+    /// checked against.
+    fn normalise_whitespace_reference(input: &str) -> String {
+        let mut out = String::with_capacity(input.len());
+        let mut last_was_space = false;
+        for c in input.chars() {
+            if c == ' ' {
+                if !last_was_space {
+                    out.push(c);
+                }
+                last_was_space = true;
+            } else {
+                last_was_space = false;
+                out.push(c);
+            }
+        }
+        out.replace(" \n", "\n").replace("\n ", "\n")
+    }
+
+    #[test]
+    fn differential_test_of_whitespace_folding() {
+        // Exhaustive, not sampled: every string up to length 5 over an
+        // alphabet carrying both whitespace characters `normalise_whitespace`
+        // treats specially plus two ordinary letters. 1,365 strings, checked
+        // against the two-pass implementation it replaced.
+        let alphabet = [' ', '\n', 'x', 'y'];
+        let mut cases: Vec<String> = vec![String::new()];
+        let mut layer: Vec<String> = vec![String::new()];
+        for _ in 0..5 {
+            let mut next_layer = Vec::new();
+            for prefix in &layer {
+                for c in alphabet {
+                    let mut s = prefix.clone();
+                    s.push(c);
+                    next_layer.push(s);
+                }
+            }
+            cases.extend(next_layer.iter().cloned());
+            layer = next_layer;
+        }
+        assert_eq!(cases.len(), 1 + 4 + 16 + 64 + 256 + 1024);
+
+        for case in &cases {
+            let old = normalise_whitespace_reference(case);
+            let new = super::normalise_whitespace(case);
+            assert_eq!(
+                old, new,
+                "folded and reference implementations disagree on {case:?}"
+            );
         }
     }
 }

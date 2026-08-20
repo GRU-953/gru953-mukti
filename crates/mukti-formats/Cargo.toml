@@ -9,7 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
-gru953-mukti = { path = "../mukti-core", version = "0.8.0" }
+gru953-mukti = { path = "../mukti-core", version = "0.9.0" }
 
 # quick-xml 0.41 is the first release fixing RUSTSEC-2026-0194 (quadratic time
 # checking a start tag for duplicate attribute names) and RUSTSEC-2026-0195
@@ -48,19 +48,19 @@ quick-xml = "0.41"
 # Dev-Memory/github-snapshot/dependabot-pull-requests.md.
 zip = { version = "8", default-features = false, features = ["deflate"] }
 
-# lopdf 0.42 is the first release fixing RUSTSEC-2026-0187: `load_mem` recursed
-# without bound through nested PDF arrays, so a ~21 KB crafted file aborted the
-# process with SIGABRT — a stack overflow, so not even catchable. Reachable by
-# opening any PDF. Do not go back below 0.42.
-lopdf = "0.44"
 # office_oxide reads the pre-2007 binary formats: .doc, .xls and .ppt. Vetted
 # before adopting, on all 141 old-format files in the measurement archive: every
 # one opened, none crashed, worst case 0.02 s. Only its *reading* code is used —
 # the modern files are written here, with `zip` and `quick-xml` below. It needs
 # Rust 1.88, which is why this workspace declares that as its minimum.
-# It extracts plain text only, with no font names, so old formats convert at the
-# same accuracy as .txt. That limit is stated to the user, not hidden.
+# It extracts plain text only, with no font names, so these three formats
+# convert without the font-declared accuracy the other three formats reach.
+# That limit is stated to the user, not hidden.
 office_oxide = "0.1.8"
+
+# lopdf, the PDF reader, was removed in 0.9.0 along with PDF support itself.
+# See CHANGELOG.md for why, and Dev-Memory/DECISIONS.md for the
+# RUSTSEC-2026-0187 history that came with it.
 
 
 [dev-dependencies]
