@@ -1,14 +1,20 @@
-# Build the command-line binary for macOS, Windows and Linux.
+# Build the command-line binary for Apple Silicon Macs.
 #
 # Runs only when a version tag is pushed, or when started by hand. It never
-# runs on an ordinary commit: building three platforms takes real minutes, and
-# on a private repository those minutes come out of your account's quota.
+# runs on an ordinary commit.
 #
-# **Nothing here is signed.** Signing needs a paid Apple Developer account and
-# a Windows certificate, and neither is set up. The first time somebody opens
-# the app their operating system will warn them it is from an unidentified
-# developer. That is expected, it is written in the release notes, and it is
-# not a sign anything is wrong.
+# **macOS arm64 only, since 0.9.0.** Windows, Linux and Intel Macs were
+# dropped in the same release that narrowed conversion to six Office
+# formats — see CHANGELOG.md for the reasoning. The two-job Intel/ARM
+# version this replaced was itself abandoned earlier: the Intel job needed
+# a `macos-13` runner, and on a private repository those queued for half
+# an hour without starting while the other jobs finished. That cost is
+# gone along with the platforms.
+#
+# **Nothing here is signed.** Signing needs a paid Apple Developer account,
+# and none is set up. The first time somebody opens the binary, macOS will
+# warn them it is from an unidentified developer. That is expected, it is
+# written in the release notes, and it is not a sign anything is wrong.
 
 name: Release
 
@@ -22,45 +28,8 @@ permissions:
 
 jobs:
   build:
-    name: ${{ matrix.label }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # ONE universal Mac build covering both architectures, rather than a
-          # separate job per architecture.
-          #
-          # The two-job version was tried and abandoned: the Intel job needs a
-          # `macos-13` runner, and on a private repository those are scarce
-          # enough that it sat queued for half an hour without starting while
-          # the other three finished. A universal binary needs no scarce
-          # runner, produces one file for users to choose between instead of
-          # two, and is what Apple expects anyway.
-          #
-          # `download-name` is what the file is called on the releases page, and it
-          # is deliberately NOT the Rust target triple. The people this tool is for
-          # should not have to know that `x86_64-unknown-linux-gnu` is the Linux one.
-          # The triple still names the build directory and the CI artefact, where
-          # precision matters and no user ever looks.
-          - os: macos-latest
-            label: macOS (universal)
-            target: universal-apple-darwin
-            download-name: mukti-macos
-            extra-targets: aarch64-apple-darwin,x86_64-apple-darwin
-          # ubuntu-22.04 on purpose, not ubuntu-latest. The binary then requires
-          # glibc 2.35 or older rather than whatever the newest runner ships, and so
-          # runs on Ubuntu 22.04, Debian 12 and RHEL 9 as well as anything newer.
-          # Building on a newer runner would silently drop those distributions.
-          - os: ubuntu-22.04
-            label: Ubuntu
-            target: x86_64-unknown-linux-gnu
-            download-name: mukti-linux
-          - os: windows-latest
-            label: Windows
-            target: x86_64-pc-windows-msvc
-            download-name: mukti-windows
-
+    name: macOS (arm64)
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -79,50 +48,26 @@ jobs:
           rustc --version
           cargo --version
 
-      # A universal build is assembled from both real Apple targets;
-      # `universal-apple-darwin` is not itself something rustup installs.
-      - name: Add the build targets
+      - name: Add the build target
         shell: bash
         run: |
-          IFS=',' read -ra targets <<< "${{ matrix.extra-targets || matrix.target }}"
-          for t in "${targets[@]}"; do rustup target add "$t"; done
+          rustup target add aarch64-apple-darwin
           rustup target list --installed
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-
-      # Ubuntu 22.04 rather than latest, and the reason changed on 15 August 2026.
-      # It used to be that the webkit2gtk package name moved between images. No
-      # system packages are installed any more, so the reason now is glibc: the
-      # binary this runner produces requires at most GLIBC_2.34, which runs on
-      # Ubuntu 22.04, Debian 12 and RHEL 9. A newer runner would raise that floor
-      # and silently drop those distributions.
 
       # The tests must pass on the machine that builds the binary, not
       # merely on some other machine earlier.
       - name: Test
         run: cargo test --workspace --release
 
-      # The command-line tool, built for real.
-      #
-      # On macOS it is built for BOTH architectures and joined with lipo. The
-      # first attempt built it only for the runner's own architecture and then
-      # named the artefact "universal", which was a lie an Intel Mac user would
-      # discover by downloading a file that would not run. The app bundle was
-      # genuinely universal; only this was not.
+      # The command-line tool, built for real, for exactly the one target
+      # this now ships. An explicit --target rather than the runner's own
+      # default: guessing among candidate output paths is how a single-
+      # architecture binary once silently overwrote a universal one (see
+      # the "Collect what was built" step below, and CHANGELOG.md).
       - name: Build the command-line tool
-        shell: bash
-        run: |
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            cargo build --release -p mukti-cli --target aarch64-apple-darwin
-            cargo build --release -p mukti-cli --target x86_64-apple-darwin
-            mkdir -p target/universal-apple-darwin/release
-            lipo -create -output target/universal-apple-darwin/release/mukti \
-              target/aarch64-apple-darwin/release/mukti \
-              target/x86_64-apple-darwin/release/mukti
-            lipo -archs target/universal-apple-darwin/release/mukti
-          else
-            cargo build --release -p mukti-cli
-          fi
+        run: cargo build --release -p mukti-cli --target aarch64-apple-darwin
 
       - name: Collect what was built
         shell: bash
@@ -130,57 +75,29 @@ jobs:
           set -euo pipefail
           mkdir -p out
 
-          # The command-line tool, under a name that says which machine it is for.
-          #
-          # ONE named source per platform, not a loop over candidates. The loop
-          # this replaces built its destination with ${f##*mukti}, which is empty
-          # for BOTH `target/universal-apple-darwin/release/mukti` and
-          # `target/release/mukti` — so on macOS the second silently overwrote the
-          # first with a single-architecture binary. It had not bitten yet only
-          # because `cargo test` does not emit `target/release/mukti` while there
-          # is no tests/ directory in the workspace. Adding one would have broken
-          # the macOS release, and a tests/ directory is exactly what comes next.
-          #
-          # Fixed by naming the file we mean instead of guessing among three.
-          case "${{ runner.os }}" in
-            macOS)
-              cp target/universal-apple-darwin/release/mukti \
-                 "out/${{ matrix.download-name }}"
-              ;;
-            Windows)
-              cp target/release/mukti.exe "out/${{ matrix.download-name }}.exe"
-              ;;
-            *)
-              cp target/release/mukti "out/${{ matrix.download-name }}"
-              ;;
-          esac
+          cp target/aarch64-apple-darwin/release/mukti out/mukti-macos
 
           # Prove the claim in the file name rather than asserting it.
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            lipo -archs "out/${{ matrix.download-name }}" | grep -q "x86_64 arm64" \
-              || { echo "the universal binary is not universal"; exit 1; }
-          fi
+          # `grep -qx` matches the whole line, which is what makes this an
+          # assertion a fat (universal) binary would not also satisfy.
+          lipo -archs "out/mukti-macos" | grep -qx "arm64" \
+            || { echo "the binary is not arm64-only"; exit 1; }
 
-          # No installers are collected, because none are built. Until
-          # 15 August 2026 this project also shipped a desktop window and its
-          # bundles; it is now a command-line tool and a library, so the one
-          # artefact per platform is the binary named above.
+          # No installers are collected, because none are built. The one
+          # artefact is the binary named above.
           #
-          # The check that replaces the installer count: the binary must exist and
-          # must run. A release whose binary does not start is worse than no
-          # release, and asserting the file is present says nothing about that.
-          binary=$(find out -type f | head -1)
-          [ -n "$binary" ] || { echo "nothing was collected"; exit 1; }
-          if [ "${{ runner.os }}" != "Windows" ]; then
-            chmod +x "$binary"
-            "$binary" --version || { echo "the binary does not run"; exit 1; }
-          fi
-          echo "collected for ${{ matrix.target }}:"
+          # The check that replaces the installer count: the binary must
+          # exist and must run. A release whose binary does not start is
+          # worse than no release, and asserting the file is present says
+          # nothing about that.
+          chmod +x out/mukti-macos
+          ./out/mukti-macos --version || { echo "the binary does not run"; exit 1; }
+          echo "collected:"
           ls -la out
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: gru953-mukti-${{ matrix.target }}
+          name: gru953-mukti-aarch64-apple-darwin
           path: out/*
           if-no-files-found: error
 
@@ -191,14 +108,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Checked out for one reason: LICENSE and THIRD-PARTY-LICENSES are attached
-      # to the release beside the binaries. MIT and the four dependency licences
-      # that MIT cannot be elected in place of all require their notice to travel
-      # with the software, and until 15 August 2026 a person who downloaded a
-      # single binary and never opened the repository received none of them.
-      #
-      # Attached here rather than copied into each platform's artefact, so there is
-      # exactly one copy of each: three would collide on name, and a stray LICENSE
-      # in `out/` could be picked up as "the binary" by the does-it-run check.
+      # to the release beside the binary. MIT and the dependency licences that MIT
+      # cannot be elected in place of all require their notice to travel with the
+      # software, and until 15 August 2026 a person who downloaded the binary and
+      # never opened the repository received none of them.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: |
@@ -223,6 +136,6 @@ jobs:
             LICENSE
             THIRD-PARTY-LICENSES
           # A draft, never a live release. Publishing is a decision a person
-          # makes, after reading the notes and running at least one binary.
+          # makes, after reading the notes and running the binary.
           draft: true
           generate_release_notes: true

@@ -1,8 +1,13 @@
-# Build and test GRU953 Mukti on all three platforms it ships to.
+# Build and test Mukti by GRU953 on macOS, the one platform it ships to.
 #
-# Running the matrix from the very first commit is deliberate: a break that
-# only shows on Windows or Ubuntu is caught the day it lands, not months later
-# when the first release is built and nobody remembers what changed.
+# Reduced from three platforms to one on 20 August 2026, in the same release
+# that narrowed conversion to six Office formats and dropped Windows, Linux
+# and Intel Macs from the release workflow — see CHANGELOG.md. The
+# consequence is worth stating rather than burying: a portability break in
+# `gru953-mukti` or `mukti-formats` would now go unnoticed here. Both are
+# still ordinary Rust with no platform-specific code, and HANDOVER.md
+# records a plan to publish them to crates.io, where they would meet other
+# platforms again without this workflow's help.
 #
 # This workflow publishes nothing and holds no secrets.
 
@@ -16,11 +21,18 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-D warnings"
+  # Warnings-as-errors moved to .cargo/config.toml on 20 August 2026, because
+  # RUSTFLAGS in the environment silently overrides that file instead of
+  # merging with it -- and the release workflow, which never set this
+  # variable, was the one build that did not enforce it. One place now, for
+  # every build. Do not re-add this variable here; the guard step below fails
+  # the run if it comes back.
 
 jobs:
-  # Formatting and lints are platform-independent, so they run once rather
-  # than three times.
+  # Formatting and lints are platform-independent, so this stays on Ubuntu —
+  # cheaper and no slower — even though `test` below is macOS-only. That is
+  # a deliberate difference, not drift: nothing about `cargo fmt` or
+  # `cargo clippy`'s verdict depends on which OS runs them.
   check:
     name: Format and lints
     runs-on: ubuntu-latest
@@ -41,20 +53,25 @@ jobs:
           rustc --version
           cargo --version
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+      # `.cargo/config.toml` is the one place warnings-as-errors is set. A
+      # `RUSTFLAGS` environment variable would silently override it rather
+      # than merge with it, which is exactly the arrangement that once let
+      # the release workflow ship without this enforced at all. This is the
+      # backstop against that coming back.
+      - name: RUSTFLAGS must not be set in the environment
+        run: |
+          if [ -n "${RUSTFLAGS:-}" ]; then
+            echo "RUSTFLAGS is set to '$RUSTFLAGS'. Warnings-as-errors belongs in .cargo/config.toml, not the environment: a RUSTFLAGS variable overrides that file instead of merging with it."
+            exit 1
+          fi
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Lint
         run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   test:
-    name: Test on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      # Do not cancel the other platforms when one fails: knowing whether a
-      # failure is on all three or only one is most of the diagnosis.
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+    name: Test on macOS
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The compiler comes from rust-toolchain.toml, and from nowhere else.
