@@ -1,12 +1,23 @@
 # Changelog
 
-## 0.9.0 — 20 August 2026
+## 0.9.0 — 28 August 2026
 
 **Six formats, and nothing else.** `.doc`, `.xls`, `.ppt`, `.docx`, `.xlsx` and
 `.pptx` are what Mukti converts now. PDF, `.txt`, `.csv`, `.md` and reading from
-a pipe (`mukti convert -`) are all removed. This is the format restriction half
-of a larger 0.9.0 release; the rest of the entry grows as the remaining work
-lands.
+a pipe (`mukti convert -`) are all removed.
+
+That narrowing is the first of six changes in this release, and the largest in
+what it takes away. The others: a measurement harness built before any speed
+work, because none existed; a **51%** cut in real-document conversion time,
+gated on the corpus at every step; a labelling defect fixed in the tool that
+produces every accuracy figure this project publishes; a command line rebuilt
+so somebody who has never used one can run it; and a release narrowed to
+Apple Silicon macOS alone. Each is below, with what it was measured against.
+
+**This is a breaking release**, and the version says so. Five formats stopped
+being convertible, the pipe is gone, and the per-file text on standard output
+is worded differently throughout — `--quiet` and the exit codes are the
+contract to depend on, not the prose.
 
 ### Removed
 
