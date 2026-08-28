@@ -193,6 +193,26 @@ fn apply_map(input: &str, map: &[(&str, &str)]) -> String {
         // one-character `&str` and the `char` it holds match at exactly the
         // same positions, and the differential test below covers every rule
         // of every real table either way.
+        //
+        // # Shared with GRU953-MTA, and why that is not a licence problem
+        //
+        // This function is byte-identical to `scribe::apply_map` in the
+        // GRU953-MTA repository, which is **AGPL-3.0-only** where this crate is
+        // MIT. That is deliberate and settled, not an oversight:
+        //
+        // Both converters descend from the same MIT-licensed ancestor
+        // (`almehady/Bijoy-to-Unicode-File-Converter`), and this particular
+        // refinement is the repository owner's own work in both places -- git
+        // records them as its sole author. A copyright holder is not bound by
+        // the licence they grant to others, so offering it here under MIT is
+        // theirs to do, and on 28 August 2026 they chose exactly that in
+        // preference to relicensing this project to AGPL.
+        //
+        // The direction matters and only one way round is open. MIT code may be
+        // taken INTO the AGPL project by anyone; AGPL code may not be taken
+        // into this MIT one by anyone other than its copyright holder. So a
+        // future contributor must not copy anything else across from MTA. See
+        // Dev-Memory/DECISIONS.md.
         let mut key = from.chars();
         let single = match (key.next(), key.next()) {
             (Some(c), None) => Some(c),
