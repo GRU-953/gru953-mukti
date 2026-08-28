@@ -1102,6 +1102,21 @@ fn check_text(bytes: &[u8], negative: bool) -> Outcome {
 
 #[cfg(test)]
 mod tests {
+    /// A scratch directory unique to THIS PROCESS.
+    ///
+    /// These were fixed names until 28 August 2026, and that is a real fragility
+    /// rather than a tidiness point: two concurrent runs of the same test binary
+    /// share the path, and one removes the other's fixture mid-test. It happened
+    /// while gating a release, when a second `cargo test` overlapped the first.
+    ///
+    /// The worst case is `check_writes_nothing`, which compares a directory
+    /// listing before and after. A concurrent run adding a file there does not
+    /// merely fail -- it fails claiming `check` wrote something, which is the one
+    /// promise this tool must never be wrongly accused of breaking.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("{name}-{}", std::process::id()))
+    }
+
     use super::*;
 
     fn tiny_archive(mode: u32) -> Vec<u8> {
@@ -1186,7 +1201,7 @@ mod tests {
 
     #[test]
     fn read_report_skips_malformed_lines_and_empty_hashes() {
-        let dir = std::env::temp_dir().join("corpus-verify-read-report-test");
+        let dir = scratch("corpus-verify-read-report-test");
         let _ = fs::create_dir_all(&dir);
         let path = dir.join("report.tsv");
         fs::write(
@@ -1215,7 +1230,7 @@ mod tests {
 
     #[test]
     fn compare_reports_counts_identical_differing_vanished_and_new() {
-        let dir = std::env::temp_dir().join("corpus-verify-compare-test");
+        let dir = scratch("corpus-verify-compare-test");
         let _ = fs::create_dir_all(&dir);
         let old_path = dir.join("old.tsv");
         let new_path = dir.join("new.tsv");

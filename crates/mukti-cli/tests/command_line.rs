@@ -32,6 +32,21 @@ fn stderr_of(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
 }
 
+/// A scratch directory unique to THIS PROCESS.
+///
+/// These were fixed names until 28 August 2026, and that is a real fragility
+/// rather than a tidiness point: two concurrent runs of the same test binary
+/// share the path, and one removes the other's fixture mid-test. It happened
+/// while gating a release, when a second `cargo test` overlapped the first.
+///
+/// The worst case is `check_writes_nothing`, which compares a directory
+/// listing before and after. A concurrent run adding a file there does not
+/// merely fail -- it fails claiming `check` wrote something, which is the one
+/// promise this tool must never be wrongly accused of breaking.
+fn scratch(name: &str) -> std::path::PathBuf {
+    std::env::temp_dir().join(format!("{name}-{}", std::process::id()))
+}
+
 #[test]
 fn version_prints_the_name_and_number_and_exits_zero() {
     let out = mukti(&["--version"]);
@@ -135,7 +150,7 @@ fn an_unknown_option_is_named_and_points_at_help() {
 /// and after, not against the absence of a message.
 #[test]
 fn check_writes_nothing_at_all() {
-    let dir = std::env::temp_dir().join("mukti-integration-check-writes-nothing");
+    let dir = scratch("mukti-integration-check-writes-nothing");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("make the scratch directory");
     let input = dir.join("not-a-real-document.docx");

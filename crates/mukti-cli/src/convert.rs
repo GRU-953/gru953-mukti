@@ -570,6 +570,21 @@ mod tests {
         Options::default()
     }
 
+    /// A scratch directory unique to THIS PROCESS.
+    ///
+    /// These were fixed names until 28 August 2026, and that is a real fragility
+    /// rather than a tidiness point: two concurrent runs of the same test binary
+    /// share the path, and one removes the other's fixture mid-test. It happened
+    /// while gating a release, when a second `cargo test` overlapped the first.
+    ///
+    /// The worst case is `check_writes_nothing`, which compares a directory
+    /// listing before and after. A concurrent run adding a file there does not
+    /// merely fail -- it fails claiming `check` wrote something, which is the one
+    /// promise this tool must never be wrongly accused of breaking.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("{name}-{}", std::process::id()))
+    }
+
     #[test]
     fn beside_derives_the_unicode_sibling_name() {
         assert_eq!(
@@ -592,7 +607,7 @@ mod tests {
 
     #[test]
     fn a_name_mukti_chose_is_not_written_over_without_being_asked() {
-        let dir = std::env::temp_dir().join("mukti-convert-clobber-test");
+        let dir = scratch("mukti-convert-clobber-test");
         let _ = fs::create_dir_all(&dir);
         let taken = dir.join("already-here.txt");
         fs::write(&taken, b"precious").unwrap();
@@ -626,7 +641,7 @@ mod tests {
     /// would be worse than either converting or refusing cleanly.
     #[test]
     fn unsupported_files_are_refused_and_nothing_is_written() {
-        let dir = std::env::temp_dir().join("mukti-convert-format-refusal-test");
+        let dir = scratch("mukti-convert-format-refusal-test");
         let _ = fs::create_dir_all(&dir);
         let bijoy: &[u8] = b"Kg\xa9m~wP cP\xd6wZ\xa1e`b \xd3Kg\xa9m~wP\xd2";
 
@@ -676,7 +691,7 @@ mod tests {
 
     #[test]
     fn the_six_supported_extensions_reach_a_format_handler() {
-        let dir = std::env::temp_dir().join("mukti-convert-format-accept-test");
+        let dir = scratch("mukti-convert-format-accept-test");
         let _ = fs::create_dir_all(&dir);
 
         for ext in ["docx", "xlsx", "pptx", "doc", "xls", "ppt"] {
@@ -704,7 +719,7 @@ mod tests {
     fn in_place_is_refused_for_the_older_formats() {
         let mut o = opts();
         o.in_place = true;
-        let dir = std::env::temp_dir().join("mukti-convert-inplace-test");
+        let dir = scratch("mukti-convert-inplace-test");
         let _ = fs::create_dir_all(&dir);
         let input = dir.join("notes.doc");
         fs::write(&input, b"anything").unwrap();
@@ -716,7 +731,7 @@ mod tests {
 
     #[test]
     fn duplicate_destinations_are_caught_before_any_file_is_read() {
-        let dir = std::env::temp_dir().join("mukti-convert-duplicate-test");
+        let dir = scratch("mukti-convert-duplicate-test");
         let _ = fs::create_dir_all(&dir);
         let a = dir.join("notes.doc");
         let b = dir.join("notes.docx");
@@ -737,7 +752,7 @@ mod tests {
 
     #[test]
     fn no_duplicate_is_reported_for_files_that_derive_different_names() {
-        let dir = std::env::temp_dir().join("mukti-convert-no-duplicate-test");
+        let dir = scratch("mukti-convert-no-duplicate-test");
         let _ = fs::create_dir_all(&dir);
         let a = dir.join("alpha.docx");
         let b = dir.join("beta.docx");
@@ -753,7 +768,7 @@ mod tests {
 
     #[test]
     fn run_reports_failures_and_stops_the_whole_batch_on_a_duplicate() {
-        let dir = std::env::temp_dir().join("mukti-convert-run-duplicate-test");
+        let dir = scratch("mukti-convert-run-duplicate-test");
         let _ = fs::create_dir_all(&dir);
         let a = dir.join("notes.doc");
         let b = dir.join("notes.docx");
@@ -772,7 +787,7 @@ mod tests {
 
     #[test]
     fn run_preserves_file_order_across_several_workers() {
-        let dir = std::env::temp_dir().join("mukti-convert-run-parallel-test");
+        let dir = scratch("mukti-convert-run-parallel-test");
         let _ = fs::create_dir_all(&dir);
         let files: Vec<PathBuf> = (0..6)
             .map(|i| {
