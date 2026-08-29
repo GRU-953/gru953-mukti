@@ -340,8 +340,10 @@ In rough order of value:
 4. **crates.io.** The crates are prepared and metadata is complete, but
    publishing needs a token belonging to the account owner. Publish in
    dependency order: `gru953-mukti`, then `mukti-formats`, then `mukti-cli`.
-5. **Code signing.** The binaries are unsigned, so both macOS and Windows warn on
-   first launch. Needs a paid Apple developer account and a Windows certificate.
+5. **Code signing.** The binary is unsigned, so macOS warns on first launch —
+   allow it once in System Settings → Privacy & Security. Needs a paid Apple
+   developer account. Singular now: 0.9.0 ships one macOS arm64 binary, so the
+   Windows certificate this entry used to also ask for is no longer needed.
 6. ~~Old binary Office formats are not supported.~~ **Supported since 14 August
    2026.** `.doc`, `.xls` and `.ppt` are read and written out as new `.docx`,
    `.xlsx` and `.pptx` files beside the original, which is never modified. All
@@ -350,7 +352,22 @@ In rough order of value:
    formatting we can keep and no font information, so the conversion is decided
    from the words alone — plain-text accuracy, not the font-declared figure the
    other three formats reach.
-7. **Markdown and HTML output.** Planned, then deferred by the owner in favour of
+7. **The four English false positives in the negative corpus.** `article2.txt`,
+   `article8.txt`, `llms-full.txt` and `claude-code-on-the-web.md`, one word
+   each, byte-identical to the 13 August baseline and unchanged by everything in
+   0.9.0. Tracked as R16l. The answer key now exists, so this is measurable at
+   last — but do not move a threshold without reading the recall figure in the
+   same breath: two guards were wrong first time at 2.2% recall each.
+8. **Release notes do not include the changelog.** `release.yml` sets
+   `generate_release_notes: true`, which produces GitHub's own compare link and
+   does not read `CHANGELOG.md`. The v0.9.0 release page carries 83 characters
+   while a 500-line entry sits in the repository.
+9. **Pushing does not trigger the workflows.** Every run this repository has had
+   was started by hand from the Actions tab — 15 runs, 0 from `push`, checked
+   28 August 2026. Workflows are active, triggers correct, files match, and
+   GitHub records the pushes as real events by a User account. Cause not found;
+   what remains is visible only to the repository owner.
+10. **Markdown and HTML output.** Planned, then deferred by the owner in favour of
    releasing. Measurement showed it could carry bold (declared in the file, so no
    guessing) and about one line break in eight joined into paragraphs, but not
    headings — font size does not separate them in this archive.

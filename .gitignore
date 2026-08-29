@@ -24,6 +24,16 @@
 /.sandbox/*
 !/.sandbox/activate
 
+# The hand-delivered handover kit. Git-ignored for the same reason Dev-Memory
+# is: it CONTAINS Dev-Memory, plus the owner's own archive folder names, and
+# this repository is public. It is built by hand, carried by hand, and must
+# never be committed.
+#
+# Added 30 August 2026, immediately after `git add -An` showed it would take all
+# five files including a 6.2 MB archive of the private reasoning record. LESSONS
+# §14 is about exactly this: scan what git WOULD add, before every commit.
+/handover/
+
 # Claude Code's per-machine settings, which hold absolute local paths.
 /.claude/settings.local.json
 
