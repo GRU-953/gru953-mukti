@@ -104,7 +104,9 @@ converting one could produce a file that no longer loads, because a Bijoy
 curly quote becomes a plain `"`, which ends a JSON string early — it happened
 to 5 of 13 real files the first time JSON was tested, on 19 August 2026.
 
-Verified across **every one of 2,315 documents** in a real archive — not a sample.
+Verified across **every one of 1,775 documents** in a real archive — not a sample.
+That figure was 2,315 before 0.9.0; dropping PDF removed 313 files from the
+archive, and the remainder moved with it.
 
 **127 legacy font families are recognised**, read from the internal name tables of the
 fonts Bijoy ships rather than guessed from filenames. Font names that merely look
@@ -381,7 +383,8 @@ of 0.9.0 (see Install, above).
 ## Contributing
 
 Issues and pull requests welcome. If you find a word converted that should not
-have been — measured at 14 in every 100,000 English words — please report it with
+have been — measured at about 146 in every 100,000 English words, the 0.146% in
+the table above — please report it with
 the text. Those cases are the most valuable.
 
 Work happens on `development`; `main` is what was last released.

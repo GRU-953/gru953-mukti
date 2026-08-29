@@ -131,11 +131,18 @@ one platform is worse than no guard at all.
 ---------------------
 Re-audited 19 August 2026, after PDF support and its parser (`lopdf`) were
 removed in 0.9.0 along with four other file formats. Two figures now, because
-one number was always ambiguous: **78 packages** in the full workspace lock
-(including devtools and test-only dependencies), of which **38** are actually
+one number was always ambiguous: **79 packages** in the full workspace lock,
+including devtools and test-only dependencies, of which **38** are actually
 compiled into the shipped `mukti` binary — down from 153 and roughly 88 before
 this release, most of that a crypto stack, three date/time stacks and a
-work-stealing scheduler that came in only through the PDF parser. Every one
+work-stealing scheduler that came in only through the PDF parser.
+
+**Re-derive the 79 rather than trusting it.** It is the 87 `[[package]]` entries
+in `Cargo.lock` minus this workspace's own 8 members. It read 78 until
+`devtools/bench` was added on 20 August 2026 and nothing recomputed it, which is
+exactly how a count like this rots: nobody notices a number that is only one out.
+
+Every one
 declares a licence, all permissive. No GPL, AGPL or SSPL anywhere.
 
 Direct dependencies of the shipped crates — the complete list, four of them:

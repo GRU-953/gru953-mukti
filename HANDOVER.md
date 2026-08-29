@@ -160,7 +160,7 @@ decisions to font metadata, so it was not built. See `Dev-Memory/LESSONS.md`
 
 Detection figures come from a **held-out** half of the data that was never
 inspected while tuning. The tuning half gives 99.936% recall — close
-agreement with the test half's 99.930%, which is the evidence there is no
+agreement with the test half's 99.927%, which is the evidence there is no
 overfitting on that figure. The two halves do NOT agree as closely on the
 English false-positive rate — 0.079% on tuning against 0.146% on test — and
 that disagreement is itself informative: it is consistent with the residue
@@ -189,7 +189,7 @@ Two honest caveats, both of which should stay attached to these numbers:
   English word in quotation marks was put through the Bijoy tables instead of being
   left alone.** That is a detection false positive, not a conversion fault, and it
   turned up here only because the residue study looks at output that is not a
-  Bengali word. It belongs with the 0.014% English false-positive rate in D2, and it
+  Bengali word. It belongs with the 0.146% English false-positive rate in D2, and it
   suggests quoted Latin text is a case the detector handles less well than bare
   Latin text.
 
