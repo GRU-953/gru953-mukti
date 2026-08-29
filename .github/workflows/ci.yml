@@ -93,3 +93,47 @@ jobs:
         run: cargo build --workspace --all-targets
       - name: Test
         run: cargo test --workspace
+
+  # Every commit here is the owner's work, under one identity. This job exists
+  # because the sibling MTA project learned the cost the hard way: four commits
+  # reached its branch in August 2026 crediting an assistant as co-author,
+  # because nothing in that repository forbade it. Clearing them rewrote every
+  # hash on the branch and forced a push, and one commit could not be cleaned at
+  # all - GitHub pins pull-request tips at refs/pull/N/head permanently. Mukti's
+  # history is clean today; this keeps it that way.
+  #
+  # The identity check is an ALLOW-list on purpose. Listing the addresses that
+  # must not appear would write them into a tracked file in a public repository,
+  # which is the opposite of the point. Offending COMMITS are printed, never
+  # addresses. `.githooks/` refuses both before a commit exists; this is the
+  # backstop for a clone that never ran `git config core.hooksPath .githooks`.
+  attribution:
+    name: Commit attribution
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Refuse AI co-author trailers and stray identities
+        shell: bash
+        run: |
+          set -euo pipefail
+          trailers=$(git log --format='%H %s%n%b' \
+            | grep -iE '^[[:space:]]*co-authored-by:.*(claude|anthropic|copilot|chatgpt|openai|gemini|cursor)' \
+            || true)
+          if [ -n "$trailers" ]; then
+            echo "::error::AI co-author trailers found in commit messages:"
+            echo "$trailers"
+            exit 1
+          fi
+          strays=$(git log --format='%H %ae %ce' \
+            | awk '$2 != "225374119+GRU-953@users.noreply.github.com" \
+                || $3 != "225374119+GRU-953@users.noreply.github.com" { print $1 }' \
+            || true)
+          if [ -n "$strays" ]; then
+            echo "::error::Commits authored under an unapproved identity:"
+            echo "$strays"
+            echo "Expected 225374119+GRU-953@users.noreply.github.com."
+            exit 1
+          fi
+          echo "Commit attribution is clean across $(git rev-list --count HEAD) commits."

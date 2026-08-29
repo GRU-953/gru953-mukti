@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Refuse a commit made under any identity but the project's own.
+#
+# This is an allow-list on purpose. Naming the addresses that must NOT be used
+# would write them into a tracked file in a PUBLIC repository, which is the
+# opposite of the point. So the rule states the one address that is correct,
+# and anything else fails.
+#
+# Enable it in a fresh clone:  git config core.hooksPath .githooks
+set -euo pipefail
+
+APPROVED='225374119+GRU-953@users.noreply.github.com'
+actual=$(git config user.email || true)
+
+if [ "$actual" != "$APPROVED" ]; then
+  echo "pre-commit: refusing a commit under the wrong identity." >&2
+  echo >&2
+  echo "  configured : ${actual:-<unset>}" >&2
+  echo "  required   : $APPROVED" >&2
+  echo >&2
+  echo "  Fix it with:" >&2
+  echo "    git config user.email '$APPROVED'" >&2
+  exit 1
+fi
+
+exit 0

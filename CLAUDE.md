@@ -24,6 +24,28 @@ deliberately short. The reasoning archive is `Dev-Memory/`, which is
    Only aggregate figures may leave `local/`. Scan the exact file list `git`
    would add before every commit.
 
+## Commit identity
+
+Every commit is the owner's work, authored and committed as
+`Aninda Sundar Howlader <225374119+GRU-953@users.noreply.github.com>`. **Never
+add a `Co-Authored-By` line naming an assistant**, and never a "generated with"
+line. All 79 commits are clean today and the `attribution` job in `ci.yml` keeps
+them that way.
+
+Enable the local guards once per clone — they cannot be enabled for you, because
+`.git/config` is outside what a sandboxed session may write:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`pre-commit` then refuses a commit under the wrong identity, and `commit-msg`
+refuses an AI attribution line. Both are stated as an **allow-list on purpose**:
+listing the addresses that must not appear would write them into a tracked file
+in a public repository. The sibling MTA project had no such guard, and clearing
+four trailers from it cost a full history rewrite, a force-push, and one commit
+that GitHub pins at `refs/pull/N/head` and will never release.
+
 ## Build and test
 
 ```bash

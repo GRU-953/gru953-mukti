@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Refuse a commit message that credits an AI as co-author.
+#
+# Mukti's history is clean and this keeps it so. The sibling MTA project shows
+# the cost of not having this: four such trailers reached its branch in August
+# 2026 because nothing in that repository forbade it, and clearing them meant
+# rewriting every hash on the branch, a force-push, and repointing two commit
+# hashes the tree itself cited. One commit could not be cleaned at all, because
+# GitHub pins pull-request tips at refs/pull/N/head permanently.
+#
+# CI carries the same check, but CI only runs after a push - and pushes to this
+# repository have never reliably triggered a workflow run. This runs first.
+#
+# Enable it in a fresh clone:  git config core.hooksPath .githooks
+set -euo pipefail
+
+# Strip comment lines. `git commit --verbose` appends the whole staged diff
+# below a comment marker, and a diff that touches this file must not trip the
+# guard against its own source.
+body=$(grep -v '^#' "$1" || true)
+
+if printf '%s' "$body" | grep -qiE '^[[:space:]]*co-authored-by:.*(claude|anthropic|copilot|chatgpt|openai|gemini|cursor)'; then
+  echo "commit-msg: refusing an AI co-author trailer." >&2
+  echo >&2
+  echo "  Every commit here is the owner's work, under one identity." >&2
+  echo "  Delete the Co-Authored-By line and commit again." >&2
+  exit 1
+fi
+
+if printf '%s' "$body" | grep -qiE 'generated with .*(claude|copilot|chatgpt|cursor)|co-authored-by:.*<noreply@anthropic\.com>|🤖'; then
+  echo "commit-msg: refusing an AI attribution line." >&2
+  echo "  Remove it and commit again." >&2
+  exit 1
+fi
+
+exit 0
