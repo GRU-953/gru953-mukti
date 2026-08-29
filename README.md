@@ -215,13 +215,22 @@ at, as are runs whose declared font contradicts their own bytes.
 
 **Accuracy on real documents: about 99.9%, and here is how that is known.**
 
-The direct measurement is that **93.481%** of converted words, over real
+The direct measurement is that **93.512%** of converted words, over real
 documents, are found in the dictionary (286,404 words). It moved twice upward
 because a fault was found and fixed — 94.015% → 94.023% when a lost halant was
 corrected, and → 94.053% on 14 August 2026 when byte 0xD0 was found to be the
-conjunct ণ্ড rather than a dash — and then down to **93.481%** on 20 August
+conjunct ণ্ড rather than a dash — and then down to **93.512%** on 20 August
 2026, for a different reason: a larger, more accurately labelled document set
-(see above), not a new converter fault. That is a **floor**, not an accuracy:
+(see above), not a new converter fault.
+
+**Which of two figures this is, stated because they are easy to confuse.**
+`eval` prints the dictionary hit twice: **93.512%** against the extended word
+list, and **93.481%** against the smaller list actually compiled into the
+binary. Every number in the series above is the extended one, and
+`check-figures.sh` gates on it, so that is what this paragraph reports. Until
+28 August 2026 the final data point was quoted as 93.481% while its three
+predecessors were extended-list figures — the series changed metric at its last
+step, which made "down to" a comparison between two different measurements. That is a **floor**, not an accuracy:
 names, places, acronyms and rare words are in no word list, so a perfectly
 converted word can be missing from one. Earlier versions of this page reported
 78.4%, which was simply wrong — it came from a superseded answer key.
